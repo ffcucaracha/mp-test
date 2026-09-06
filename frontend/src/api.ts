@@ -1,4 +1,14 @@
-import type { AgroField, FieldCreate, Post, User, UserUpdate } from './types'
+import type {
+  AgroField,
+  FieldCreate,
+  Post,
+  PrivacyVariant,
+  PublicField,
+  User,
+  UserUpdate,
+  VisitRequest,
+  VisitRequestStatus,
+} from './types'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -40,6 +50,26 @@ export const api = {
     request<AgroField>(`/api/users/${userId}/fields`, {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+  updateFieldPrivacy: (fieldId: number, ownerId: number, privacyVariant: PrivacyVariant) =>
+    request<AgroField>(`/api/fields/${fieldId}/privacy`, {
+      method: 'PUT',
+      body: JSON.stringify({ owner_id: ownerId, privacy_variant: privacyVariant }),
+    }),
+  publicFields: (viewerId: number) => request<PublicField[]>(`/api/public/fields?viewer_id=${viewerId}`),
+  requestVisit: (fieldId: number, requesterId: number, message: string) =>
+    request<VisitRequest>(`/api/fields/${fieldId}/visit-requests`, {
+      method: 'POST',
+      body: JSON.stringify({ requester_id: requesterId, message }),
+    }),
+  incomingVisitRequests: (ownerId: number) =>
+    request<VisitRequest[]>(`/api/users/${ownerId}/visit-requests/incoming`),
+  outgoingVisitRequests: (requesterId: number) =>
+    request<VisitRequest[]>(`/api/users/${requesterId}/visit-requests/outgoing`),
+  updateVisitRequest: (requestId: number, ownerId: number, requestStatus: Exclude<VisitRequestStatus, 'pending'>) =>
+    request<VisitRequest>(`/api/visit-requests/${requestId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ owner_id: ownerId, status: requestStatus }),
     }),
   posts: () => request<Post[]>('/api/posts'),
 }
