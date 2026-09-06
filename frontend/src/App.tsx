@@ -4,6 +4,8 @@ import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { api } from './api'
 import './features.css'
 import { FeedPage } from './FeedPage'
+import { MetricsPage } from './MetricsPage'
+import { NeighborsPage } from './NeighborsPage'
 import { Stage4Panel } from './Stage4Panel'
 import type { AgroField, FieldCreate, User, UserUpdate } from './types'
 
@@ -102,10 +104,9 @@ function AgroConnectApp() {
         <Routes>
           <Route path="/feed" element={<FeedPage currentUser={currentUser} />} />
           <Route path="/fields" element={<FieldsPage user={currentUser} />} />
-          <Route
-            path="/profile"
-            element={<ProfilePage user={currentUser} onSaved={replaceUser} onLogout={logout} />}
-          />
+          <Route path="/neighbors" element={<NeighborsPage currentUser={currentUser} users={users} />} />
+          <Route path="/metrics" element={<MetricsPage />} />
+          <Route path="/profile" element={<ProfilePage user={currentUser} onSaved={replaceUser} onLogout={logout} />} />
           <Route path="*" element={<Navigate to="/feed" replace />} />
         </Routes>
       </main>
@@ -118,6 +119,10 @@ function AgroConnectApp() {
         <NavLink to="/fields" className={({ isActive }) => (isActive ? 'active' : '')}>
           <span>⌖</span>
           Поля
+        </NavLink>
+        <NavLink to="/neighbors" className={({ isActive }) => (isActive ? 'active' : '')}>
+          <span>◎</span>
+          Соседи
         </NavLink>
         <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
           <span>○</span>
@@ -132,8 +137,12 @@ function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: (user: 
   const [form, setForm] = useState<UserUpdate>(() => toUserUpdate(user))
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [neighborCount, setNeighborCount] = useState(0)
 
   useEffect(() => setForm(toUserUpdate(user)), [user])
+  useEffect(() => {
+    api.neighbors(user.id).then((items) => setNeighborCount(items.length)).catch(() => setNeighborCount(0))
+  }, [user.id])
 
   const completeness = useMemo(() => {
     const values = [form.name, form.region, form.specialization, form.farm_name, form.bio]
@@ -165,11 +174,13 @@ function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: (user: 
             <div className="username">@{user.username}</div>
           </div>
         </div>
+        <div className="profile-stat-row"><span>Соседи</span><strong>{neighborCount}</strong></div>
         <div className="completion-row">
           <span>Полнота профиля</span>
           <strong>{completeness}%</strong>
         </div>
         <div className="completion-track"><span style={{ width: `${completeness}%` }} /></div>
+        <button className="secondary-button full-width" type="button" onClick={() => { window.location.hash = '#/metrics' }}>Метрики MVP</button>
       </div>
 
       <form className="form-card" onSubmit={submit}>
@@ -191,11 +202,7 @@ function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: (user: 
         </FormField>
 
         <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={form.is_beekeeper}
-            onChange={(e) => setForm({ ...form, is_beekeeper: e.target.checked })}
-          />
+          <input type="checkbox" checked={form.is_beekeeper} onChange={(e) => setForm({ ...form, is_beekeeper: e.target.checked })} />
           <span><strong>У меня есть пасека</strong><small>Пчеловодство — дополнительный признак профиля, а не отдельная роль.</small></span>
         </label>
 
@@ -227,67 +234,35 @@ function FieldsPage({ user }: { user: User }) {
   const [showForm, setShowForm] = useState(false)
   const [locating, setLocating] = useState(false)
   const [draft, setDraft] = useState<FieldCreate>({
-    name: '',
-    crop: '',
-    rotation: '',
-    latitude: 54.9914,
-    longitude: 73.3645,
-    area_ha: null,
-    privacy_variant: 'A',
+    name: '', crop: '', rotation: '', latitude: 54.9914, longitude: 73.3645, area_ha: null, privacy_variant: 'A',
   })
 
   useEffect(() => {
     setLoading(true)
-    api.fields(user.id)
-      .then(setFields)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить поля'))
-      .finally(() => setLoading(false))
+    api.fields(user.id).then(setFields).catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить поля')).finally(() => setLoading(false))
   }, [user.id])
 
   function detectLocation() {
-    if (!navigator.geolocation) {
-      setError('Геолокация не поддерживается устройством')
-      return
-    }
-    setLocating(true)
-    setError('')
+    if (!navigator.geolocation) { setError('Геолокация не поддерживается устройством'); return }
+    setLocating(true); setError('')
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setDraft((current) => ({ ...current, latitude: position.coords.latitude, longitude: position.coords.longitude }))
-        setLocating(false)
-      },
-      () => {
-        setError('Не удалось получить геопозицию. Координаты можно указать вручную.')
-        setLocating(false)
-      },
+      (position) => { setDraft((current) => ({ ...current, latitude: position.coords.latitude, longitude: position.coords.longitude })); setLocating(false) },
+      () => { setError('Не удалось получить геопозицию. Координаты можно указать вручную.'); setLocating(false) },
       { enableHighAccuracy: true, timeout: 10000 },
     )
   }
 
   async function createField(event: FormEvent) {
-    event.preventDefault()
-    setError('')
+    event.preventDefault(); setError('')
     try {
       const created = await api.createField(user.id, draft)
       setFields((current) => [...current, created])
-      setDraft({
-        name: '',
-        crop: '',
-        rotation: '',
-        latitude: created.latitude,
-        longitude: created.longitude,
-        area_ha: null,
-        privacy_variant: 'A',
-      })
+      setDraft({ name: '', crop: '', rotation: '', latitude: created.latitude, longitude: created.longitude, area_ha: null, privacy_variant: 'A' })
       setShowForm(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось создать поле')
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Не удалось создать поле') }
   }
 
-  function replaceField(updated: AgroField) {
-    setFields((current) => current.map((field) => (field.id === updated.id ? updated : field)))
-  }
+  function replaceField(updated: AgroField) { setFields((current) => current.map((field) => (field.id === updated.id ? updated : field))) }
 
   return (
     <section className="fields-page">
@@ -295,62 +270,29 @@ function FieldsPage({ user }: { user: User }) {
         <div><h1>Мои поля</h1><p>География — основа ленты и будущих предупреждений.</p></div>
         <button className="primary-button compact-button" onClick={() => setShowForm((value) => !value)}>{showForm ? 'Закрыть' : '+ Поле'}</button>
       </div>
-
       {showForm && (
         <form className="form-card field-form" onSubmit={createField}>
           <h2>Новое поле</h2>
           <div className="two-columns">
-            <FormField label="Название">
-              <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Северное поле" required />
-            </FormField>
-            <FormField label="Культура">
-              <input value={draft.crop} onChange={(e) => setDraft({ ...draft, crop: e.target.value })} placeholder="Пшеница" required />
-            </FormField>
+            <FormField label="Название"><input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Северное поле" required /></FormField>
+            <FormField label="Культура"><input value={draft.crop} onChange={(e) => setDraft({ ...draft, crop: e.target.value })} placeholder="Пшеница" required /></FormField>
           </div>
-          <FormField label="Севооборот (необязательно)">
-            <input
-              value={draft.rotation ?? ''}
-              onChange={(e) => setDraft({ ...draft, rotation: e.target.value })}
-              placeholder="Пар → пшеница → рапс"
-            />
-          </FormField>
+          <FormField label="Севооборот (необязательно)"><input value={draft.rotation ?? ''} onChange={(e) => setDraft({ ...draft, rotation: e.target.value })} placeholder="Пар → пшеница → рапс" /></FormField>
           <div className="two-columns">
-            <FormField label="Площадь, га (необязательно)">
-              <input type="number" min="0.1" step="0.1" value={draft.area_ha ?? ''} onChange={(e) => setDraft({ ...draft, area_ha: e.target.value ? Number(e.target.value) : null })} />
-            </FormField>
-            <FormField label="Приватность">
-              <select
-                value={draft.privacy_variant ?? 'A'}
-                onChange={(e) => setDraft({ ...draft, privacy_variant: e.target.value as 'A' | 'B' })}
-              >
-                <option value="A">A — открыто</option>
-                <option value="B">B — детали по запросу</option>
-              </select>
-            </FormField>
+            <FormField label="Площадь, га (необязательно)"><input type="number" min="0.1" step="0.1" value={draft.area_ha ?? ''} onChange={(e) => setDraft({ ...draft, area_ha: e.target.value ? Number(e.target.value) : null })} /></FormField>
+            <FormField label="Приватность"><select value={draft.privacy_variant ?? 'A'} onChange={(e) => setDraft({ ...draft, privacy_variant: e.target.value as 'A' | 'B' })}><option value="A">A — открыто</option><option value="B">B — детали по запросу</option></select></FormField>
           </div>
           <button type="button" className="location-button" onClick={detectLocation} disabled={locating}>{locating ? 'Определяем…' : '⌖ Использовать мою геопозицию'}</button>
           <div className="two-columns">
-            <FormField label="Широта">
-              <input type="number" step="0.000001" value={draft.latitude} onChange={(e) => setDraft({ ...draft, latitude: Number(e.target.value) })} required />
-            </FormField>
-            <FormField label="Долгота">
-              <input type="number" step="0.000001" value={draft.longitude} onChange={(e) => setDraft({ ...draft, longitude: Number(e.target.value) })} required />
-            </FormField>
+            <FormField label="Широта"><input type="number" step="0.000001" value={draft.latitude} onChange={(e) => setDraft({ ...draft, latitude: Number(e.target.value) })} required /></FormField>
+            <FormField label="Долгота"><input type="number" step="0.000001" value={draft.longitude} onChange={(e) => setDraft({ ...draft, longitude: Number(e.target.value) })} required /></FormField>
           </div>
           <MapPreview latitude={draft.latitude} longitude={draft.longitude} />
           <button className="primary-button" type="submit">Сохранить поле</button>
         </form>
       )}
-
       {error && <div className="error-banner">{error}</div>}
-      {loading ? <p>Загрузка полей…</p> : fields.length === 0 ? (
-        <div className="empty-card"><strong>Пока нет полей</strong><p>Добавьте первое поле и привяжите его к местности.</p></div>
-      ) : (
-        <div className="field-list">
-          {fields.map((field) => <FieldCard key={field.id} field={field} />)}
-        </div>
-      )}
-
+      {loading ? <p>Загрузка полей…</p> : fields.length === 0 ? <div className="empty-card"><strong>Пока нет полей</strong><p>Добавьте первое поле и привяжите его к местности.</p></div> : <div className="field-list">{fields.map((field) => <FieldCard key={field.id} field={field} />)}</div>}
       {!loading && <Stage4Panel user={user} fields={fields} onFieldChanged={replaceField} />}
     </section>
   )
@@ -361,15 +303,8 @@ function FieldCard({ field }: { field: AgroField }) {
     <article className="field-card">
       <MapPreview latitude={field.latitude} longitude={field.longitude} compact />
       <div className="field-card-body">
-        <div className="field-title-row">
-          <h2>{field.name}</h2>
-          <span className="crop-pill">{field.crop}</span>
-        </div>
-        <div className="field-facts">
-          {field.area_ha && <span>{field.area_ha} га</span>}
-          <span>{field.latitude.toFixed(4)}, {field.longitude.toFixed(4)}</span>
-          <span>Приватность {field.privacy_variant}</span>
-        </div>
+        <div className="field-title-row"><h2>{field.name}</h2><span className="crop-pill">{field.crop}</span></div>
+        <div className="field-facts">{field.area_ha && <span>{field.area_ha} га</span>}<span>{field.latitude.toFixed(4)}, {field.longitude.toFixed(4)}</span><span>Приватность {field.privacy_variant}</span></div>
         {field.rotation && <p className="muted">Севооборот: {field.rotation}</p>}
       </div>
     </article>
@@ -383,21 +318,10 @@ function MapPreview({ latitude, longitude, compact = false }: { latitude: number
   return <iframe className={`map-preview ${compact ? 'compact' : ''}`} src={src} title={`Карта ${latitude}, ${longitude}`} loading="lazy" />
 }
 
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="form-field"><span>{label}</span>{children}</label>
-}
+function FormField({ label, children }: { label: string; children: React.ReactNode }) { return <label className="form-field"><span>{label}</span>{children}</label> }
 
 function toUserUpdate(user: User): UserUpdate {
-  return {
-    name: user.name,
-    region: user.region,
-    specialization: user.specialization,
-    farm_name: user.farm_name,
-    bio: user.bio,
-    is_beekeeper: user.is_beekeeper,
-    news_radius_km: user.news_radius_km,
-    broadcast_radius_km: user.broadcast_radius_km,
-  }
+  return { name: user.name, region: user.region, specialization: user.specialization, farm_name: user.farm_name, bio: user.bio, is_beekeeper: user.is_beekeeper, news_radius_km: user.news_radius_km, broadcast_radius_km: user.broadcast_radius_km }
 }
 
 function Avatar({ name, small = false, large = false }: { name: string; small?: boolean; large?: boolean }) {
