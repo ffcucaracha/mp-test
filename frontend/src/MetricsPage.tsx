@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { api } from './api'
+import './analytics-neighbors.css'
 import type { InternalMetrics } from './types'
 
 export function MetricsPage() {
