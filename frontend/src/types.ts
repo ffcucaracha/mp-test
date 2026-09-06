@@ -104,3 +104,37 @@ export type PostCreate = {
   latitude: number
   longitude: number
 }
+
+export type NeighborLink = {
+  user: User
+  created_at: string
+}
+
+export type ProductEventSummary = {
+  event_name: string
+  user_id: number | null
+  experiment_variant: string | null
+  properties: Record<string, unknown>
+  created_at: string
+}
+
+export type InternalMetrics = {
+  activation: {
+    users: number
+    profiles_completed: number
+    fields: number
+    fields_with_location: number
+  }
+  social: {
+    posts: number
+    reactions: number
+    comments: number
+    neighbors: number
+  }
+  events: Record<string, number>
+  privacy_experiment: Record<'A' | 'B', {
+    fields: number
+    events: Record<string, number>
+  }>
+  recent_events: ProductEventSummary[]
+}
