@@ -142,3 +142,8 @@ class FeedPostOut(BaseModel):
     score: int
     viewer_reaction: Literal[-1, 1] | None
     comments: list[CommentOut]
+
+
+class NeighborOut(BaseModel):
+    user: UserOut
+    created_at: datetime
