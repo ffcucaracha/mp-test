@@ -1,7 +1,8 @@
 import type {
   AgroField,
+  FeedPost,
   FieldCreate,
-  Post,
+  PostCreate,
   PrivacyVariant,
   PublicField,
   User,
@@ -71,5 +72,20 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ owner_id: ownerId, status: requestStatus }),
     }),
-  posts: () => request<Post[]>('/api/posts'),
+  feed: (viewerId: number) => request<FeedPost[]>(`/api/feed?viewer_id=${viewerId}`),
+  createPost: (payload: PostCreate) =>
+    request<FeedPost>('/api/posts', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  setReaction: (postId: number, userId: number, value: -1 | 1) =>
+    request<FeedPost>(`/api/posts/${postId}/reaction`, {
+      method: 'PUT',
+      body: JSON.stringify({ user_id: userId, value }),
+    }),
+  addComment: (postId: number, authorId: number, text: string) =>
+    request<FeedPost>(`/api/posts/${postId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ author_id: authorId, text }),
+    }),
 }
