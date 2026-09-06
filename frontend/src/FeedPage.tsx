@@ -1,0 +1,391 @@
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+
+import { api } from './api'
+import './feed.css'
+import type { AgroField, FeedPost, PostCreate, PostStatus, User } from './types'
+
+const STATUS_OPTIONS: { value: PostStatus; label: string }[] = [
+  { value: 'sowing', label: 'Посев' },
+  { value: 'sprouts', label: 'Всходы' },
+  { value: 'flowering', label: 'Цветение' },
+  { value: 'problem', label: 'Проблема' },
+  { value: 'harvest', label: 'Урожай' },
+  { value: 'treatment', label: 'Обработка' },
+]
+
+const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((item) => [item.value, item.label])) as Record<PostStatus, string>
+
+export function FeedPage({ currentUser }: { currentUser: User }) {
+  const [fields, setFields] = useState<AgroField[]>([])
+  const [posts, setPosts] = useState<FeedPost[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showComposer, setShowComposer] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [photoName, setPhotoName] = useState('')
+  const [draft, setDraft] = useState<PostCreate>({
+    author_id: currentUser.id,
+    field_id: 0,
+    text: '',
+    status: 'problem',
+    photo_data_url: '',
+    latitude: 0,
+    longitude: 0,
+  })
+
+  const reloadFeed = useCallback(async () => {
+    const data = await api.feed(currentUser.id)
+    setPosts(data)
+  }, [currentUser.id])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    Promise.all([api.fields(currentUser.id), api.feed(currentUser.id)])
+      .then(([fieldData, feedData]) => {
+        if (cancelled) return
+        setFields(fieldData)
+        setPosts(feedData)
+        const first = fieldData[0]
+        if (first) {
+          setDraft((current) => ({
+            ...current,
+            author_id: currentUser.id,
+            field_id: first.id,
+            latitude: first.latitude,
+            longitude: first.longitude,
+          }))
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить ленту')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser.id])
+
+  const selectedField = useMemo(
+    () => fields.find((field) => field.id === draft.field_id) ?? null,
+    [draft.field_id, fields],
+  )
+
+  function selectField(fieldId: number) {
+    const field = fields.find((item) => item.id === fieldId)
+    if (!field) return
+    setDraft((current) => ({
+      ...current,
+      field_id: field.id,
+      latitude: field.latitude,
+      longitude: field.longitude,
+    }))
+  }
+
+  async function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setError('')
+    try {
+      const dataUrl = await resizeImage(file)
+      setDraft((current) => ({ ...current, photo_data_url: dataUrl }))
+      setPhotoName(file.name)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось обработать фотографию')
+    }
+  }
+
+  async function submitPost(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedField) {
+      setError('Сначала добавьте поле')
+      return
+    }
+    if (!draft.photo_data_url) {
+      setError('Добавьте фотографию')
+      return
+    }
+
+    setSubmitting(true)
+    setError('')
+    try {
+      await api.createPost({ ...draft, author_id: currentUser.id })
+      setDraft((current) => ({
+        ...current,
+        text: '',
+        status: 'problem',
+        photo_data_url: '',
+      }))
+      setPhotoName('')
+      setShowComposer(false)
+      await reloadFeed()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось опубликовать запись')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function react(postId: number, value: -1 | 1) {
+    setError('')
+    try {
+      await api.setReaction(postId, currentUser.id, value)
+      await reloadFeed()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось сохранить реакцию')
+    }
+  }
+
+  async function comment(postId: number, text: string) {
+    setError('')
+    try {
+      const updated = await api.addComment(postId, currentUser.id, text)
+      setPosts((current) => current.map((post) => (post.id === updated.id ? updated : post)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось добавить комментарий')
+      throw err
+    }
+  }
+
+  return (
+    <section className="social-feed-page">
+      <div className="feed-page-heading">
+        <div>
+          <h1>Лента рядом</h1>
+          <p>Публикации из хозяйств в радиусе {currentUser.news_radius_km} км, выше — записи с лучшей оценкой.</p>
+        </div>
+        <button
+          type="button"
+          className="primary-button compact-button"
+          disabled={fields.length === 0}
+          onClick={() => setShowComposer((value) => !value)}
+        >
+          {showComposer ? 'Закрыть' : '+ Публикация'}
+        </button>
+      </div>
+
+      {fields.length === 0 && !loading && (
+        <div className="feed-info-card">
+          <strong>Для публикации нужно поле</strong>
+          <p>Перейдите в раздел «Поля», добавьте его и привяжите к географии.</p>
+        </div>
+      )}
+
+      {showComposer && selectedField && (
+        <form className="publication-composer" onSubmit={submitPost}>
+          <div className="composer-title-row">
+            <div>
+              <span className="feed-kicker">Этап 5 · публикация с поля</span>
+              <h2>Что происходит?</h2>
+            </div>
+            <span className="field-location-chip">⌖ {selectedField.name}</span>
+          </div>
+
+          <div className="feed-form-grid">
+            <label className="feed-field">
+              <span>Поле</span>
+              <select value={draft.field_id} onChange={(e) => selectField(Number(e.target.value))}>
+                {fields.map((field) => (
+                  <option key={field.id} value={field.id}>{field.name} · {field.crop}</option>
+                ))}
+              </select>
+            </label>
+            <label className="feed-field">
+              <span>Статус</span>
+              <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as PostStatus })}>
+                {STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <label className="photo-picker">
+            <input type="file" accept="image/*" capture="environment" onChange={(event) => void choosePhoto(event)} />
+            {draft.photo_data_url ? (
+              <img src={draft.photo_data_url} alt="Предпросмотр публикации" />
+            ) : (
+              <span className="photo-placeholder">
+                <b>＋ Фото с поля</b>
+                <small>Камера или галерея</small>
+              </span>
+            )}
+          </label>
+          {photoName && <small className="photo-name">{photoName}</small>}
+
+          <label className="feed-field">
+            <span>Комментарий (необязательно)</span>
+            <textarea
+              rows={3}
+              value={draft.text}
+              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+              placeholder="Что заметили? Нужен совет?"
+            />
+          </label>
+
+          <div className="publication-meta">
+            <span>⌖ {draft.latitude.toFixed(4)}, {draft.longitude.toFixed(4)}</span>
+            <span>{selectedField.crop}</span>
+          </div>
+
+          <button className="primary-button full-width" type="submit" disabled={submitting}>
+            {submitting ? 'Публикуем…' : 'Опубликовать'}
+          </button>
+        </form>
+      )}
+
+      {error && <div className="error-banner">{error}</div>}
+
+      {loading ? (
+        <p>Загрузка ленты…</p>
+      ) : posts.length === 0 ? (
+        <div className="feed-info-card"><strong>В радиусе пока тихо</strong><p>Создайте первую публикацию с поля.</p></div>
+      ) : (
+        <div className="social-feed-list">
+          {posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              currentUser={currentUser}
+              onReact={(value) => void react(post.id, value)}
+              onComment={(text) => comment(post.id, text)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function PostCard({
+  post,
+  currentUser,
+  onReact,
+  onComment,
+}: {
+  post: FeedPost
+  currentUser: User
+  onReact: (value: -1 | 1) => void
+  onComment: (text: string) => Promise<void>
+}) {
+  const [commentText, setCommentText] = useState('')
+  const [commenting, setCommenting] = useState(false)
+
+  async function submitComment(event: FormEvent) {
+    event.preventDefault()
+    const text = commentText.trim()
+    if (!text) return
+    setCommenting(true)
+    try {
+      await onComment(text)
+      setCommentText('')
+    } finally {
+      setCommenting(false)
+    }
+  }
+
+  return (
+    <article className="social-post-card">
+      <div className="social-post-author">
+        <Avatar name={post.author.name} />
+        <div>
+          <strong>{post.author.name}</strong>
+          <span>@{post.author.username} · {post.author.region}</span>
+        </div>
+        <span className={`post-score ${post.score < 0 ? 'negative' : ''}`}>score {post.score > 0 ? `+${post.score}` : post.score}</span>
+      </div>
+
+      <div className="post-context-row">
+        <span className={`status-chip status-${post.status}`}>{STATUS_LABELS[post.status]}</span>
+        <span>{post.field_name} · {post.crop}</span>
+        {post.distance_km !== null && <span>⌖ {post.distance_km} км</span>}
+      </div>
+
+      <img className="post-photo" src={post.photo_data_url} alt={`${STATUS_LABELS[post.status]} — ${post.crop}`} />
+      {post.text && <p className="social-post-text">{post.text}</p>}
+
+      <div className="reaction-row">
+        <button
+          type="button"
+          className={`reaction-button healthy ${post.viewer_reaction === 1 ? 'active' : ''}`}
+          onClick={() => onReact(1)}
+          aria-label="Здоровый колос"
+        >
+          <span>🌾</span><b>{post.healthy_count}</b><small>здорово</small>
+        </button>
+        <button
+          type="button"
+          className={`reaction-button wilted ${post.viewer_reaction === -1 ? 'active' : ''}`}
+          onClick={() => onReact(-1)}
+          aria-label="Увядший колос"
+        >
+          <span>🥀</span><b>{post.wilted_count}</b><small>проблема</small>
+        </button>
+        <span className="comment-count">💬 {post.comments.length}</span>
+      </div>
+
+      {post.comments.length > 0 && (
+        <div className="comment-list">
+          {post.comments.map((comment) => (
+            <div className="comment-item" key={comment.id}>
+              <Avatar name={comment.author.name} small />
+              <div><strong>{comment.author.name}</strong><p>{comment.text}</p></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form className="comment-form" onSubmit={submitComment}>
+        <Avatar name={currentUser.name} small />
+        <input
+          value={commentText}
+          onChange={(e) => setCommentText(e.target.value)}
+          placeholder="Ответить по делу…"
+          maxLength={1000}
+        />
+        <button type="submit" disabled={!commentText.trim() || commenting}>{commenting ? '…' : '↗'}</button>
+      </form>
+    </article>
+  )
+}
+
+function Avatar({ name, small = false }: { name: string; small?: boolean }) {
+  const initials = name.split(' ').map((part) => part[0]).join('').slice(0, 2)
+  return <div className={`feed-avatar ${small ? 'small' : ''}`}>{initials}</div>
+}
+
+async function resizeImage(file: File): Promise<string> {
+  if (!file.type.startsWith('image/')) throw new Error('Выберите изображение')
+  const original = await readFile(file)
+  const image = await loadImage(original)
+  const maxSide = 1280
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height))
+  const width = Math.max(1, Math.round(image.width * scale))
+  const height = Math.max(1, Math.round(image.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Не удалось подготовить изображение')
+  context.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL('image/jpeg', 0.82)
+}
+
+function readFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Не удалось прочитать фотографию'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Не удалось открыть фотографию'))
+    image.src = src
+  })
+}
