@@ -81,6 +81,54 @@ jobs:
           assert field['visit_request_status'] == 'approved'
           PY
 
+      - name: Verify publications and social feed
+        run: |
+          curl --fail 'http://localhost:8000/api/feed?viewer_id=1' > /tmp/feed-before.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/feed-before.json') as f:
+              feed = json.load(f)
+          assert len(feed) >= 2
+          assert all('healthy_count' in post and 'comments' in post for post in feed)
+          PY
+
+          PHOTO='data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%2210%22%3E%3Crect%20width=%2210%22%20height=%2210%22%20fill=%22green%22/%3E%3C/svg%3E'
+          curl --fail -X POST http://localhost:8000/api/posts \
+            -H 'Content-Type: application/json' \
+            -d "{\"author_id\":1,\"field_id\":1,\"text\":\"Тестовая публикация\",\"status\":\"problem\",\"photo_data_url\":\"${PHOTO}\",\"latitude\":54.9914,\"longitude\":73.3645}" > /tmp/post.json
+
+          POST_ID=$(python3 - <<'PY'
+          import json
+          with open('/tmp/post.json') as f:
+              post = json.load(f)
+          assert post['field_name'] == 'Северное поле'
+          assert post['status'] == 'problem'
+          print(post['id'])
+          PY
+          )
+
+          curl --fail -X PUT "http://localhost:8000/api/posts/${POST_ID}/reaction" \
+            -H 'Content-Type: application/json' \
+            -d '{"user_id":2,"value":1}' > /tmp/reacted.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/reacted.json') as f:
+              post = json.load(f)
+          assert post['healthy_count'] == 1
+          assert post['score'] == 1
+          PY
+
+          curl --fail -X POST "http://localhost:8000/api/posts/${POST_ID}/comments" \
+            -H 'Content-Type: application/json' \
+            -d '{"author_id":2,"text":"Проверю у себя на поле"}' > /tmp/commented.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/commented.json') as f:
+              post = json.load(f)
+          assert len(post['comments']) == 1
+          assert post['comments'][0]['text'] == 'Проверю у себя на поле'
+          PY
+
       - name: Verify frontend
         run: curl --fail http://localhost:5173
 
