@@ -129,6 +129,41 @@ jobs:
           assert post['comments'][0]['text'] == 'Проверю у себя на поле'
           PY
 
+      - name: Verify analytics metrics and neighbors
+        run: |
+          curl --fail -X POST 'http://localhost:8000/api/neighbors/2?user_id=1' > /tmp/neighbor.json
+          curl --fail 'http://localhost:8000/api/neighbors?user_id=1' > /tmp/neighbors.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/neighbors.json') as f:
+              neighbors = json.load(f)
+          assert any(item['user']['id'] == 2 for item in neighbors)
+          PY
+
+          curl --fail 'http://localhost:8000/api/neighbors/2/profile?user_id=1' > /tmp/neighbor-profile.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/neighbor-profile.json') as f:
+              profile = json.load(f)
+          assert profile['id'] == 2
+          PY
+
+          curl --fail 'http://localhost:8000/api/internal/metrics' > /tmp/metrics.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/metrics.json') as f:
+              metrics = json.load(f)
+          assert metrics['activation']['users'] >= 4
+          assert metrics['activation']['fields_with_location'] >= 4
+          assert metrics['social']['neighbors'] >= 1
+          assert metrics['events'].get('neighbor_added', 0) >= 1
+          assert metrics['events'].get('neighbor_profile_opened', 0) >= 1
+          assert metrics['events'].get('feed_opened', 0) >= 1
+          assert 'A' in metrics['privacy_experiment'] and 'B' in metrics['privacy_experiment']
+          PY
+
+          curl --fail -X DELETE 'http://localhost:8000/api/neighbors/2?user_id=1'
+
       - name: Verify frontend
         run: curl --fail http://localhost:5173
 
