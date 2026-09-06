@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field as PydanticField
 
@@ -32,9 +33,11 @@ class UserUpdate(BaseModel):
 class FieldCreate(BaseModel):
     name: str = PydanticField(min_length=1, max_length=120)
     crop: str = PydanticField(min_length=1, max_length=120)
+    rotation: str = PydanticField(default="", max_length=1000)
     latitude: float = PydanticField(ge=-90, le=90)
     longitude: float = PydanticField(ge=-180, le=180)
     area_ha: float | None = PydanticField(default=None, gt=0)
+    privacy_variant: Literal["A", "B"] = "A"
 
 
 class FieldOut(FieldCreate):
@@ -42,6 +45,53 @@ class FieldOut(FieldCreate):
 
     id: int
     owner_id: int
+    created_at: datetime
+
+
+class FieldPrivacyUpdate(BaseModel):
+    owner_id: int
+    privacy_variant: Literal["A", "B"]
+
+
+class PublicFieldOut(BaseModel):
+    id: int
+    owner_id: int
+    owner_name: str
+    owner_username: str
+    owner_region: str
+    privacy_variant: Literal["A", "B"]
+    details_visible: bool
+    name: str | None
+    crop: str | None
+    rotation: str | None
+    area_ha: float | None
+    latitude: float | None
+    longitude: float | None
+    approximate_latitude: float
+    approximate_longitude: float
+    visit_request_status: Literal["pending", "approved", "declined"] | None = None
+
+
+class VisitRequestCreate(BaseModel):
+    requester_id: int
+    message: str = PydanticField(default="", max_length=500)
+
+
+class VisitRequestStatusUpdate(BaseModel):
+    owner_id: int
+    status: Literal["approved", "declined"]
+
+
+class VisitRequestOut(BaseModel):
+    id: int
+    field_id: int
+    field_name: str
+    owner_id: int
+    requester_id: int
+    requester_name: str
+    requester_username: str
+    message: str
+    status: Literal["pending", "approved", "declined"]
     created_at: datetime
 
 
