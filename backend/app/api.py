@@ -1,11 +1,12 @@
 from math import asin, cos, radians, sin, sqrt
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .analytics import track
 from .database import get_db
-from .models import Comment, Field, Post, Reaction, User, VisitRequest
+from .models import Comment, Field, Neighbor, Post, ProductEvent, Reaction, User, VisitRequest
 from .schemas import (
     CommentCreate,
     CommentOut,
@@ -13,6 +14,7 @@ from .schemas import (
     FieldCreate,
     FieldOut,
     FieldPrivacyUpdate,
+    NeighborOut,
     PostCreate,
     PublicFieldOut,
     ReactionSet,
@@ -45,6 +47,13 @@ def _get_post_or_404(db: Session, post_id: int) -> Post:
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     return post
+
+
+def _profile_complete(user: User) -> bool:
+    return all(
+        value.strip()
+        for value in [user.name, user.region, user.specialization, user.farm_name, user.bio]
+    )
 
 
 def _visit_status(db: Session, field_id: int, viewer_id: int | None) -> str | None:
@@ -150,6 +159,11 @@ def _feed_post(post: Post, viewer: User | None, viewer_field: Field | None) -> F
     )
 
 
+def _neighbor_out(db: Session, neighbor: Neighbor) -> NeighborOut:
+    neighbor_user = _get_user_or_404(db, neighbor.neighbor_user_id)
+    return NeighborOut(user=UserOut.model_validate(neighbor_user), created_at=neighbor.created_at)
+
+
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "agroconnect-api"}
@@ -162,7 +176,9 @@ def list_users(db: Session = Depends(get_db)) -> list[User]:
 
 @router.get("/users/{user_id}", response_model=UserOut)
 def get_user(user_id: int, db: Session = Depends(get_db)) -> User:
-    return _get_user_or_404(db, user_id)
+    user = _get_user_or_404(db, user_id)
+    track("profile_viewed", user_id=user_id)
+    return user
 
 
 @router.put("/users/{user_id}", response_model=UserOut)
@@ -172,6 +188,9 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         setattr(user, key, value)
     db.commit()
     db.refresh(user)
+    track("profile_updated", user_id=user.id)
+    if _profile_complete(user):
+        track("profile_completed", user_id=user.id)
     return user
 
 
@@ -188,12 +207,17 @@ def create_field(user_id: int, payload: FieldCreate, db: Session = Depends(get_d
     db.add(field)
     db.commit()
     db.refresh(field)
+    properties = {"field_id": field.id, "crop": field.crop}
+    track("field_created", user_id=user_id, experiment_variant=field.privacy_variant, properties=properties)
+    track("field_location_added", user_id=user_id, experiment_variant=field.privacy_variant, properties=properties)
     return field
 
 
 @router.get("/fields/{field_id}", response_model=FieldOut)
 def get_field(field_id: int, db: Session = Depends(get_db)) -> Field:
-    return _get_field_or_404(db, field_id)
+    field = _get_field_or_404(db, field_id)
+    track("field_opened", user_id=field.owner_id, experiment_variant=field.privacy_variant, properties={"field_id": field.id})
+    return field
 
 
 @router.put("/fields/{field_id}/privacy", response_model=FieldOut)
@@ -204,6 +228,7 @@ def update_field_privacy(field_id: int, payload: FieldPrivacyUpdate, db: Session
     field.privacy_variant = payload.privacy_variant
     db.commit()
     db.refresh(field)
+    track("field_privacy_changed", user_id=field.owner_id, experiment_variant=field.privacy_variant, properties={"field_id": field.id})
     return field
 
 
@@ -219,7 +244,11 @@ def list_public_fields(viewer_id: int | None = None, db: Session = Depends(get_d
 def get_public_field(field_id: int, viewer_id: int | None = None, db: Session = Depends(get_db)) -> PublicFieldOut:
     if viewer_id is not None:
         _get_user_or_404(db, viewer_id)
-    return _public_field(db, _get_field_or_404(db, field_id), viewer_id)
+    field = _get_field_or_404(db, field_id)
+    result = _public_field(db, field, viewer_id)
+    event_name = "public_field_viewed" if result.details_visible else "private_field_viewed"
+    track(event_name, user_id=viewer_id, experiment_variant=field.privacy_variant, properties={"field_id": field.id, "owner_id": field.owner_id})
+    return result
 
 
 @router.post("/fields/{field_id}/visit-requests", response_model=VisitRequestOut, status_code=status.HTTP_201_CREATED)
@@ -235,6 +264,7 @@ def create_visit_request(field_id: int, payload: VisitRequestCreate, db: Session
     db.add(request)
     db.commit()
     db.refresh(request)
+    track("visit_request_sent", user_id=requester.id, experiment_variant=field.privacy_variant, properties={"field_id": field.id, "owner_id": field.owner_id})
     return _visit_request_out(request)
 
 
@@ -269,6 +299,12 @@ def update_visit_request(request_id: int, payload: VisitRequestStatusUpdate, db:
     request.status = payload.status
     db.commit()
     db.refresh(request)
+    track(
+        "visit_request_approved" if payload.status == "approved" else "visit_request_rejected",
+        user_id=payload.owner_id,
+        experiment_variant=request.field.privacy_variant,
+        properties={"field_id": request.field_id, "requester_id": request.requester_id},
+    )
     return _visit_request_out(request)
 
 
@@ -284,6 +320,7 @@ def create_post(payload: PostCreate, db: Session = Depends(get_db)) -> FeedPostO
     db.add(post)
     db.commit()
     db.refresh(post)
+    track("post_created", user_id=author.id, experiment_variant=field.privacy_variant, properties={"post_id": post.id, "field_id": field.id, "status": post.status})
     return _feed_post(post, author, field)
 
 
@@ -300,6 +337,7 @@ def feed(viewer_id: int, db: Session = Depends(get_db)) -> list[FeedPostOut]:
             result.append(item)
 
     result.sort(key=lambda item: (item.score, item.created_at), reverse=True)
+    track("feed_opened", user_id=viewer.id, properties={"items": len(result), "radius_km": viewer.news_radius_km})
     return result
 
 
@@ -310,12 +348,16 @@ def set_reaction(post_id: int, payload: ReactionSet, db: Session = Depends(get_d
     reaction = db.scalar(select(Reaction).where(Reaction.post_id == post.id, Reaction.user_id == viewer.id))
     if reaction and reaction.value == payload.value:
         db.delete(reaction)
+        event_name = "reaction_removed"
     elif reaction:
         reaction.value = payload.value
+        event_name = "reaction_changed"
     else:
         db.add(Reaction(post_id=post.id, user_id=viewer.id, value=payload.value))
+        event_name = "reaction_added"
     db.commit()
     db.refresh(post)
+    track(event_name, user_id=viewer.id, properties={"post_id": post.id, "value": payload.value})
     viewer_field = db.scalar(select(Field).where(Field.owner_id == viewer.id).order_by(Field.id))
     return _feed_post(post, viewer, viewer_field)
 
@@ -327,5 +369,102 @@ def create_comment(post_id: int, payload: CommentCreate, db: Session = Depends(g
     db.add(Comment(post_id=post.id, author_id=author.id, text=payload.text.strip()))
     db.commit()
     db.refresh(post)
+    track("comment_created", user_id=author.id, properties={"post_id": post.id})
     viewer_field = db.scalar(select(Field).where(Field.owner_id == author.id).order_by(Field.id))
     return _feed_post(post, author, viewer_field)
+
+
+@router.get("/neighbors", response_model=list[NeighborOut])
+def list_neighbors(user_id: int, db: Session = Depends(get_db)) -> list[NeighborOut]:
+    _get_user_or_404(db, user_id)
+    rows = list(db.scalars(select(Neighbor).where(Neighbor.user_id == user_id).order_by(Neighbor.created_at.desc(), Neighbor.id.desc())).all())
+    return [_neighbor_out(db, row) for row in rows]
+
+
+@router.post("/neighbors/{neighbor_user_id}", response_model=NeighborOut, status_code=status.HTTP_201_CREATED)
+def add_neighbor(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> NeighborOut:
+    _get_user_or_404(db, user_id)
+    _get_user_or_404(db, neighbor_user_id)
+    if user_id == neighbor_user_id:
+        raise HTTPException(status_code=400, detail="You cannot add yourself as a neighbor")
+    existing = db.scalar(select(Neighbor).where(Neighbor.user_id == user_id, Neighbor.neighbor_user_id == neighbor_user_id))
+    if existing:
+        return _neighbor_out(db, existing)
+    row = Neighbor(user_id=user_id, neighbor_user_id=neighbor_user_id)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    track("neighbor_added", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id})
+    return _neighbor_out(db, row)
+
+
+@router.delete("/neighbors/{neighbor_user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_neighbor(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> Response:
+    _get_user_or_404(db, user_id)
+    row = db.scalar(select(Neighbor).where(Neighbor.user_id == user_id, Neighbor.neighbor_user_id == neighbor_user_id))
+    if row:
+        db.delete(row)
+        db.commit()
+        track("neighbor_removed", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/neighbors/{neighbor_user_id}/profile", response_model=UserOut)
+def get_neighbor_profile(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> User:
+    _get_user_or_404(db, user_id)
+    neighbor_user = _get_user_or_404(db, neighbor_user_id)
+    relation = db.scalar(select(Neighbor).where(Neighbor.user_id == user_id, Neighbor.neighbor_user_id == neighbor_user_id))
+    if not relation:
+        raise HTTPException(status_code=404, detail="User is not in your neighbors")
+    track("neighbor_profile_opened", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id})
+    return neighbor_user
+
+
+@router.get("/internal/metrics")
+def internal_metrics(db: Session = Depends(get_db)) -> dict:
+    users = list(db.scalars(select(User)).all())
+    event_rows = db.execute(
+        select(ProductEvent.event_name, func.count(ProductEvent.id)).group_by(ProductEvent.event_name)
+    ).all()
+    event_counts = {name: count for name, count in event_rows}
+
+    privacy = {}
+    for variant in ("A", "B"):
+        variant_events = db.execute(
+            select(ProductEvent.event_name, func.count(ProductEvent.id))
+            .where(ProductEvent.experiment_variant == variant)
+            .group_by(ProductEvent.event_name)
+        ).all()
+        privacy[variant] = {
+            "fields": db.scalar(select(func.count(Field.id)).where(Field.privacy_variant == variant)) or 0,
+            "events": {name: count for name, count in variant_events},
+        }
+
+    recent = list(db.scalars(select(ProductEvent).order_by(ProductEvent.created_at.desc(), ProductEvent.id.desc()).limit(30)).all())
+
+    return {
+        "activation": {
+            "users": len(users),
+            "profiles_completed": sum(1 for user in users if _profile_complete(user)),
+            "fields": db.scalar(select(func.count(Field.id))) or 0,
+            "fields_with_location": db.scalar(select(func.count(Field.id)).where(Field.latitude.is_not(None), Field.longitude.is_not(None))) or 0,
+        },
+        "social": {
+            "posts": db.scalar(select(func.count(Post.id))) or 0,
+            "reactions": db.scalar(select(func.count(Reaction.id))) or 0,
+            "comments": db.scalar(select(func.count(Comment.id))) or 0,
+            "neighbors": db.scalar(select(func.count(Neighbor.id))) or 0,
+        },
+        "events": event_counts,
+        "privacy_experiment": privacy,
+        "recent_events": [
+            {
+                "event_name": event.event_name,
+                "user_id": event.user_id,
+                "experiment_variant": event.experiment_variant,
+                "properties": event.properties,
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in recent
+        ],
+    }
