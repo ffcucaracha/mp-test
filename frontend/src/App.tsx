@@ -3,6 +3,7 @@ import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 
 import { api } from './api'
 import './features.css'
+import { Stage4Panel } from './Stage4Panel'
 import type { AgroField, FieldCreate, Post, User, UserUpdate } from './types'
 
 const RADII = [25, 50, 100, 200]
@@ -259,7 +260,15 @@ function FieldsPage({ user }: { user: User }) {
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [locating, setLocating] = useState(false)
-  const [draft, setDraft] = useState<FieldCreate>({ name: '', crop: '', latitude: 54.9914, longitude: 73.3645, area_ha: null })
+  const [draft, setDraft] = useState<FieldCreate>({
+    name: '',
+    crop: '',
+    rotation: '',
+    latitude: 54.9914,
+    longitude: 73.3645,
+    area_ha: null,
+    privacy_variant: 'A',
+  })
 
   useEffect(() => {
     setLoading(true)
@@ -295,11 +304,23 @@ function FieldsPage({ user }: { user: User }) {
     try {
       const created = await api.createField(user.id, draft)
       setFields((current) => [...current, created])
-      setDraft({ name: '', crop: '', latitude: created.latitude, longitude: created.longitude, area_ha: null })
+      setDraft({
+        name: '',
+        crop: '',
+        rotation: '',
+        latitude: created.latitude,
+        longitude: created.longitude,
+        area_ha: null,
+        privacy_variant: 'A',
+      })
       setShowForm(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось создать поле')
     }
+  }
+
+  function replaceField(updated: AgroField) {
+    setFields((current) => current.map((field) => (field.id === updated.id ? updated : field)))
   }
 
   return (
@@ -320,9 +341,27 @@ function FieldsPage({ user }: { user: User }) {
               <input value={draft.crop} onChange={(e) => setDraft({ ...draft, crop: e.target.value })} placeholder="Пшеница" required />
             </FormField>
           </div>
-          <FormField label="Площадь, га (необязательно)">
-            <input type="number" min="0.1" step="0.1" value={draft.area_ha ?? ''} onChange={(e) => setDraft({ ...draft, area_ha: e.target.value ? Number(e.target.value) : null })} />
+          <FormField label="Севооборот (необязательно)">
+            <input
+              value={draft.rotation ?? ''}
+              onChange={(e) => setDraft({ ...draft, rotation: e.target.value })}
+              placeholder="Пар → пшеница → рапс"
+            />
           </FormField>
+          <div className="two-columns">
+            <FormField label="Площадь, га (необязательно)">
+              <input type="number" min="0.1" step="0.1" value={draft.area_ha ?? ''} onChange={(e) => setDraft({ ...draft, area_ha: e.target.value ? Number(e.target.value) : null })} />
+            </FormField>
+            <FormField label="Приватность">
+              <select
+                value={draft.privacy_variant ?? 'A'}
+                onChange={(e) => setDraft({ ...draft, privacy_variant: e.target.value as 'A' | 'B' })}
+              >
+                <option value="A">A — открыто</option>
+                <option value="B">B — детали по запросу</option>
+              </select>
+            </FormField>
+          </div>
           <button type="button" className="location-button" onClick={detectLocation} disabled={locating}>{locating ? 'Определяем…' : '⌖ Использовать мою геопозицию'}</button>
           <div className="two-columns">
             <FormField label="Широта">
@@ -345,6 +384,8 @@ function FieldsPage({ user }: { user: User }) {
           {fields.map((field) => <FieldCard key={field.id} field={field} />)}
         </div>
       )}
+
+      {!loading && <Stage4Panel user={user} fields={fields} onFieldChanged={replaceField} />}
     </section>
   )
 }
@@ -354,11 +395,16 @@ function FieldCard({ field }: { field: AgroField }) {
     <article className="field-card">
       <MapPreview latitude={field.latitude} longitude={field.longitude} compact />
       <div className="field-card-body">
-        <div className="field-title-row"><h2>{field.name}</h2><span className="crop-pill">{field.crop}</span></div>
+        <div className="field-title-row">
+          <h2>{field.name}</h2>
+          <span className="crop-pill">{field.crop}</span>
+        </div>
         <div className="field-facts">
           {field.area_ha && <span>{field.area_ha} га</span>}
           <span>{field.latitude.toFixed(4)}, {field.longitude.toFixed(4)}</span>
+          <span>Приватность {field.privacy_variant}</span>
         </div>
+        {field.rotation && <p className="muted">Севооборот: {field.rotation}</p>}
       </div>
     </article>
   )
