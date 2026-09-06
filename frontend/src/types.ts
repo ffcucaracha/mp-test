@@ -66,9 +66,41 @@ export type VisitRequest = {
   created_at: string
 }
 
-export type Post = {
+export type PostStatus = 'sowing' | 'sprouts' | 'flowering' | 'problem' | 'harvest' | 'treatment'
+
+export type FeedComment = {
   id: number
+  author: User
   text: string
   created_at: string
+}
+
+export type FeedPost = {
+  id: number
+  text: string
+  status: PostStatus
+  photo_data_url: string
+  latitude: number
+  longitude: number
+  created_at: string
   author: User
+  field_id: number
+  field_name: string
+  crop: string
+  distance_km: number | null
+  healthy_count: number
+  wilted_count: number
+  score: number
+  viewer_reaction: -1 | 1 | null
+  comments: FeedComment[]
+}
+
+export type PostCreate = {
+  author_id: number
+  field_id: number
+  text: string
+  status: PostStatus
+  photo_data_url: string
+  latitude: number
+  longitude: number
 }
