@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field as PydanticField
 
+PostStatus = Literal["sowing", "sprouts", "flowering", "problem", "harvest", "treatment"]
+
 
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -95,8 +97,48 @@ class VisitRequestOut(BaseModel):
     created_at: datetime
 
 
-class PostOut(BaseModel):
+class CommentCreate(BaseModel):
+    author_id: int
+    text: str = PydanticField(min_length=1, max_length=1000)
+
+
+class CommentOut(BaseModel):
     id: int
+    author: UserOut
     text: str
     created_at: datetime
+
+
+class ReactionSet(BaseModel):
+    user_id: int
+    value: Literal[-1, 1]
+
+
+class PostCreate(BaseModel):
+    author_id: int
+    field_id: int
+    text: str = PydanticField(default="", max_length=3000)
+    status: PostStatus
+    photo_data_url: str = PydanticField(min_length=10, max_length=4_500_000)
+    latitude: float = PydanticField(ge=-90, le=90)
+    longitude: float = PydanticField(ge=-180, le=180)
+
+
+class FeedPostOut(BaseModel):
+    id: int
+    text: str
+    status: PostStatus
+    photo_data_url: str
+    latitude: float
+    longitude: float
+    created_at: datetime
     author: UserOut
+    field_id: int
+    field_name: str
+    crop: str
+    distance_km: float | None
+    healthy_count: int
+    wilted_count: int
+    score: int
+    viewer_reaction: Literal[-1, 1] | None
+    comments: list[CommentOut]
