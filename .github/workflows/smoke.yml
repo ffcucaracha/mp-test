@@ -36,6 +36,51 @@ jobs:
           curl --fail http://localhost:8000/api/users
           curl --fail http://localhost:8000/api/users/1/fields
 
+      - name: Verify privacy and visit request flow
+        run: |
+          curl --fail -X PUT http://localhost:8000/api/fields/3/privacy \
+            -H 'Content-Type: application/json' \
+            -d '{"owner_id":2,"privacy_variant":"B"}'
+
+          curl --fail 'http://localhost:8000/api/public/fields/3?viewer_id=1' > /tmp/field-before.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/field-before.json') as f:
+              field = json.load(f)
+          assert field['privacy_variant'] == 'B'
+          assert field['details_visible'] is False
+          assert field['name'] is None
+          assert field['latitude'] is None
+          PY
+
+          curl --fail -X POST http://localhost:8000/api/fields/3/visit-requests \
+            -H 'Content-Type: application/json' \
+            -d '{"requester_id":1,"message":"Хочу посмотреть поле"}' > /tmp/request.json
+
+          REQUEST_ID=$(python3 - <<'PY'
+          import json
+          with open('/tmp/request.json') as f:
+              print(json.load(f)['id'])
+          PY
+          )
+
+          curl --fail http://localhost:8000/api/users/2/visit-requests/incoming
+
+          curl --fail -X PUT "http://localhost:8000/api/visit-requests/${REQUEST_ID}" \
+            -H 'Content-Type: application/json' \
+            -d '{"owner_id":2,"status":"approved"}'
+
+          curl --fail 'http://localhost:8000/api/public/fields/3?viewer_id=1' > /tmp/field-after.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/field-after.json') as f:
+              field = json.load(f)
+          assert field['details_visible'] is True
+          assert field['name'] == 'Берёзовка'
+          assert field['latitude'] is not None
+          assert field['visit_request_status'] == 'approved'
+          PY
+
       - name: Verify frontend
         run: curl --fail http://localhost:5173
 
