@@ -29,10 +29,10 @@ export type AgroField = {
   created_at: string
 }
 
-export type FieldCreate = Pick<
-  AgroField,
-  'name' | 'crop' | 'rotation' | 'latitude' | 'longitude' | 'area_ha' | 'privacy_variant'
->
+export type FieldCreate = Pick<AgroField, 'name' | 'crop' | 'latitude' | 'longitude' | 'area_ha'> & {
+  rotation?: string
+  privacy_variant?: PrivacyVariant
+}
 
 export type PublicField = {
   id: number
