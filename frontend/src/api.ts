@@ -2,6 +2,8 @@ import type {
   AgroField,
   FeedPost,
   FieldCreate,
+  InternalMetrics,
+  NeighborLink,
   PostCreate,
   PrivacyVariant,
   PublicField,
@@ -33,6 +35,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(message)
   }
 
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 
@@ -88,4 +91,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ author_id: authorId, text }),
     }),
+  neighbors: (userId: number) => request<NeighborLink[]>(`/api/neighbors?user_id=${userId}`),
+  addNeighbor: (userId: number, neighborUserId: number) =>
+    request<NeighborLink>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'POST' }),
+  removeNeighbor: (userId: number, neighborUserId: number) =>
+    request<void>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'DELETE' }),
+  neighborProfile: (userId: number, neighborUserId: number) =>
+    request<User>(`/api/neighbors/${neighborUserId}/profile?user_id=${userId}`),
+  metrics: () => request<InternalMetrics>('/api/internal/metrics'),
 }
