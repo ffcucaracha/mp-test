@@ -3,8 +3,9 @@ import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 
 import { api } from './api'
 import './features.css'
+import { FeedPage } from './FeedPage'
 import { Stage4Panel } from './Stage4Panel'
-import type { AgroField, FieldCreate, Post, User, UserUpdate } from './types'
+import type { AgroField, FieldCreate, User, UserUpdate } from './types'
 
 const RADII = [25, 50, 100, 200]
 
@@ -18,7 +19,6 @@ export default function App() {
 
 function AgroConnectApp() {
   const [users, setUsers] = useState<User[]>([])
-  const [posts, setPosts] = useState<Post[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | null>(() => {
     const saved = localStorage.getItem('agroconnect.userId')
     return saved ? Number(saved) : null
@@ -27,11 +27,10 @@ function AgroConnectApp() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([api.health(), api.users(), api.posts()])
-      .then(([, usersData, postsData]) => {
+    Promise.all([api.health(), api.users()])
+      .then(([, usersData]) => {
         setServerOk(true)
         setUsers(usersData)
-        setPosts(postsData)
       })
       .catch(() => setServerOk(false))
       .finally(() => setLoading(false))
@@ -101,7 +100,7 @@ function AgroConnectApp() {
 
       <main className="content stage-content">
         <Routes>
-          <Route path="/feed" element={<FeedPage posts={posts} currentUser={currentUser} />} />
+          <Route path="/feed" element={<FeedPage currentUser={currentUser} />} />
           <Route path="/fields" element={<FieldsPage user={currentUser} />} />
           <Route
             path="/profile"
@@ -126,39 +125,6 @@ function AgroConnectApp() {
         </NavLink>
       </nav>
     </div>
-  )
-}
-
-function FeedPage({ posts, currentUser }: { posts: Post[]; currentUser: User }) {
-  return (
-    <section>
-      <div className="composer teaser">
-        <Avatar name={currentUser.name} />
-        <div>
-          <strong>Что происходит в хозяйстве?</strong>
-          <p>Публикации с фото будут следующим продуктовым этапом.</p>
-        </div>
-      </div>
-      <div className="feed">
-        {posts.map((post) => (
-          <article className="post" key={post.id}>
-            <Avatar name={post.author.name} />
-            <div className="post-body">
-              <div className="post-meta">
-                <strong>{post.author.name}</strong>
-                <span>@{post.author.username} · {post.author.region}</span>
-              </div>
-              <p>{post.text}</p>
-              <div className="post-actions">
-                <span>🌾 0</span>
-                <span>🥀 0</span>
-                <span>💬 0</span>
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
   )
 }
 
