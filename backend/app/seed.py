@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from .database import SessionLocal
 from .models import Comment, Field, Post, Reaction, User
@@ -16,6 +16,15 @@ def _photo(label: str, color: str) -> str:
         '</svg>'
     )
     return f"data:image/svg+xml,{quote(svg)}"
+
+
+def _sync_sequence(db, table_name: str) -> None:
+    db.execute(
+        text(
+            f"SELECT setval(pg_get_serial_sequence('{table_name}', 'id'), "
+            f"COALESCE((SELECT MAX(id) FROM {table_name}), 1), true)"
+        )
+    )
 
 
 def seed_data() -> None:
@@ -60,4 +69,11 @@ def seed_data() -> None:
             Comment(post_id=1, author_id=2, text="Похоже на грибковую историю. Я бы посмотрел нижнюю сторону листа."),
             Comment(post_id=1, author_id=3, text="Если после дождей усиливается, лучше не затягивать с осмотром."),
         ])
+        db.flush()
+
+        # Explicit IDs keep demo data deterministic, so advance PostgreSQL sequences
+        # before API-created rows start using autoincrement IDs.
+        for table_name in ("users", "fields", "posts"):
+            _sync_sequence(db, table_name)
+
         db.commit()
