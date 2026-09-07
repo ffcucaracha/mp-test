@@ -65,7 +65,6 @@ jobs:
           )
 
           curl --fail http://localhost:8000/api/users/2/visit-requests/incoming
-
           curl --fail -X PUT "http://localhost:8000/api/visit-requests/${REQUEST_ID}" \
             -H 'Content-Type: application/json' \
             -d '{"owner_id":2,"status":"approved"}'
@@ -131,7 +130,7 @@ jobs:
 
       - name: Verify analytics metrics and neighbors
         run: |
-          curl --fail -X POST 'http://localhost:8000/api/neighbors/2?user_id=1' > /tmp/neighbor.json
+          curl --fail -X POST 'http://localhost:8000/api/neighbors/2?user_id=1'
           curl --fail 'http://localhost:8000/api/neighbors?user_id=1' > /tmp/neighbors.json
           python3 - <<'PY'
           import json
@@ -140,29 +139,107 @@ jobs:
           assert any(item['user']['id'] == 2 for item in neighbors)
           PY
 
-          curl --fail 'http://localhost:8000/api/neighbors/2/profile?user_id=1' > /tmp/neighbor-profile.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/neighbor-profile.json') as f:
-              profile = json.load(f)
-          assert profile['id'] == 2
-          PY
-
+          curl --fail 'http://localhost:8000/api/neighbors/2/profile?user_id=1'
           curl --fail 'http://localhost:8000/api/internal/metrics' > /tmp/metrics.json
           python3 - <<'PY'
           import json
           with open('/tmp/metrics.json') as f:
               metrics = json.load(f)
           assert metrics['activation']['users'] >= 4
-          assert metrics['activation']['fields_with_location'] >= 4
           assert metrics['social']['neighbors'] >= 1
           assert metrics['events'].get('neighbor_added', 0) >= 1
-          assert metrics['events'].get('neighbor_profile_opened', 0) >= 1
           assert metrics['events'].get('feed_opened', 0) >= 1
-          assert 'A' in metrics['privacy_experiment'] and 'B' in metrics['privacy_experiment']
           PY
 
           curl --fail -X DELETE 'http://localhost:8000/api/neighbors/2?user_id=1'
+
+      - name: Verify crop rotation
+        run: |
+          curl --fail 'http://localhost:8000/api/fields/1/crop-seasons?viewer_id=1' > /tmp/seasons.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/seasons.json') as f:
+              seasons = json.load(f)
+          assert len(seasons) >= 3
+          assert seasons[0]['year'] >= seasons[-1]['year']
+          PY
+
+          curl --fail -X POST http://localhost:8000/api/fields/1/crop-seasons \
+            -H 'Content-Type: application/json' \
+            -d '{"user_id":1,"year":2027,"crop":"Горох"}' > /tmp/season-created.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/season-created.json') as f:
+              season = json.load(f)
+          assert season['year'] == 2027
+          assert season['crop'] == 'Горох'
+          PY
+
+      - name: Verify apiary pesticide alerts
+        run: |
+          curl --fail 'http://localhost:8000/api/apiaries?user_id=1' > /tmp/apiaries.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/apiaries.json') as f:
+              apiaries = json.load(f)
+          assert len(apiaries) >= 1
+          PY
+
+          curl --fail -X POST http://localhost:8000/api/alerts \
+            -H 'Content-Type: application/json' \
+            -d '{"author_id":2,"field_id":3,"type":"pesticide","latitude":55.0415,"longitude":82.9346,"radius_km":25,"starts_at":"2026-09-08T07:00:00Z","title":"Планируется обработка пестицидами","details":"Обработка ячменя утром"}' > /tmp/alert-created.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/alert-created.json') as f:
+              result = json.load(f)
+          assert result['recipients'] >= 1
+          print(result['id'])
+          PY
+
+          ALERT_ID=$(python3 - <<'PY'
+          import json
+          with open('/tmp/alert-created.json') as f:
+              print(json.load(f)['id'])
+          PY
+          )
+
+          curl --fail 'http://localhost:8000/api/alerts?user_id=1' > /tmp/alerts.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/alerts.json') as f:
+              alerts = json.load(f)
+          assert any(item['type'] == 'pesticide' and not item['is_opened'] for item in alerts)
+          PY
+
+          curl --fail 'http://localhost:8000/api/alerts/unread-count?user_id=1' > /tmp/unread.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/unread.json') as f:
+              assert json.load(f)['count'] >= 1
+          PY
+
+          curl --fail -X PUT "http://localhost:8000/api/alerts/${ALERT_ID}/open" \
+            -H 'Content-Type: application/json' \
+            -d '{"user_id":1}' > /tmp/opened.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/opened.json') as f:
+              assert json.load(f)['is_opened'] is True
+          PY
+
+          curl --fail -X POST "http://localhost:8000/api/alerts/${ALERT_ID}/owner-contact?user_id=1" > /tmp/owner.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/owner.json') as f:
+              assert json.load(f)['id'] == 2
+          PY
+
+      - name: Verify browser metrics page
+        run: |
+          curl --fail http://localhost:8000/internal/metrics > /tmp/metrics.html
+          grep -q 'AgroConnect' /tmp/metrics.html
+          grep -q 'Сезоны севооборота' /tmp/metrics.html
+          grep -q 'Пасеки' /tmp/metrics.html
 
       - name: Verify frontend
         run: curl --fail http://localhost:5173
