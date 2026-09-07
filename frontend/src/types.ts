@@ -34,6 +34,14 @@ export type FieldCreate = Pick<AgroField, 'name' | 'crop' | 'latitude' | 'longit
   privacy_variant?: PrivacyVariant
 }
 
+export type CropSeason = {
+  id: number
+  field_id: number
+  year: number
+  crop: string
+  created_at: string
+}
+
 export type PublicField = {
   id: number
   owner_id: number
@@ -108,6 +116,51 @@ export type PostCreate = {
 export type NeighborLink = {
   user: User
   created_at: string
+}
+
+export type Apiary = {
+  id: number
+  owner_id: number
+  name: string
+  latitude: number
+  longitude: number
+  alert_radius_km: number
+  created_at: string
+}
+
+export type ApiaryCreate = Omit<Apiary, 'id' | 'created_at'>
+
+export type AlertType = 'disease' | 'pesticide' | 'weather'
+
+export type AlertItem = {
+  id: number
+  type: AlertType
+  title: string
+  details: string
+  field_id: number | null
+  field_name: string | null
+  author: User
+  latitude: number
+  longitude: number
+  radius_km: number
+  starts_at: string | null
+  distance_km: number | null
+  apiary_id: number | null
+  apiary_name: string | null
+  is_opened: boolean
+  created_at: string
+}
+
+export type AlertCreate = {
+  author_id: number
+  field_id: number | null
+  type: AlertType
+  latitude: number
+  longitude: number
+  radius_km: number
+  starts_at: string | null
+  title: string
+  details: string
 }
 
 export type ProductEventSummary = {
