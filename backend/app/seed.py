@@ -4,7 +4,7 @@ from urllib.parse import quote
 from sqlalchemy import select, text
 
 from .database import SessionLocal
-from .models import Comment, Field, Post, Reaction, User
+from .models import Apiary, Comment, CropSeason, Field, Post, Reaction, User
 
 
 def _photo(label: str, color: str) -> str:
@@ -42,13 +42,25 @@ def seed_data() -> None:
         db.flush()
 
         fields = [
-            Field(id=1, owner_id=1, name="Северное поле", crop="Пшеница", rotation="Пар → пшеница → рапс", latitude=54.9914, longitude=73.3645, area_ha=120, privacy_variant="A"),
-            Field(id=2, owner_id=1, name="У пасеки", crop="Рапс", rotation="Пшеница → рапс → ячмень", latitude=55.0350, longitude=73.2850, area_ha=48, privacy_variant="B"),
-            Field(id=3, owner_id=2, name="Берёзовка", crop="Ячмень", rotation="Пшеница → ячмень → горох", latitude=55.0415, longitude=82.9346, area_ha=86, privacy_variant="B"),
-            Field(id=4, owner_id=3, name="Тепличный участок", crop="Томаты", rotation="Томаты → сидераты → огурцы", latitude=53.3474, longitude=83.7784, area_ha=12, privacy_variant="A"),
+            Field(id=1, owner_id=1, name="Северное поле", crop="Пшеница", rotation="", latitude=54.9914, longitude=73.3645, area_ha=120, privacy_variant="A"),
+            Field(id=2, owner_id=1, name="У пасеки", crop="Рапс", rotation="", latitude=55.0350, longitude=73.2850, area_ha=48, privacy_variant="B"),
+            Field(id=3, owner_id=2, name="Берёзовка", crop="Ячмень", rotation="", latitude=55.0415, longitude=82.9346, area_ha=86, privacy_variant="B"),
+            Field(id=4, owner_id=3, name="Тепличный участок", crop="Томаты", rotation="", latitude=53.3474, longitude=83.7784, area_ha=12, privacy_variant="A"),
         ]
         db.add_all(fields)
         db.flush()
+
+        db.add_all([
+            CropSeason(field_id=1, year=2024, crop="Пар"),
+            CropSeason(field_id=1, year=2025, crop="Рапс"),
+            CropSeason(field_id=1, year=2026, crop="Пшеница"),
+            CropSeason(field_id=2, year=2024, crop="Пшеница"),
+            CropSeason(field_id=2, year=2025, crop="Ячмень"),
+            CropSeason(field_id=2, year=2026, crop="Рапс"),
+            CropSeason(field_id=3, year=2025, crop="Пшеница"),
+            CropSeason(field_id=3, year=2026, crop="Ячмень"),
+            Apiary(owner_id=1, name="Выездная пасека", latitude=55.0410, longitude=82.9400, alert_radius_km=50),
+        ])
 
         now = datetime.now(timezone.utc)
         posts = [
@@ -71,9 +83,7 @@ def seed_data() -> None:
         ])
         db.flush()
 
-        # Explicit IDs keep demo data deterministic, so advance PostgreSQL sequences
-        # before API-created rows start using autoincrement IDs.
-        for table_name in ("users", "fields", "posts"):
+        for table_name in ("users", "fields", "posts", "crop_seasons", "apiaries"):
             _sync_sequence(db, table_name)
 
         db.commit()
