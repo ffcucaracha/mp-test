@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -29,6 +29,9 @@ class User(Base):
     )
     reactions: Mapped[list["Reaction"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     comments: Mapped[list["Comment"]] = relationship(back_populates="author", cascade="all, delete-orphan")
+    apiaries: Mapped[list["Apiary"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
+    alerts: Mapped[list["Alert"]] = relationship(back_populates="author", cascade="all, delete-orphan")
+    alert_recipients: Mapped[list["AlertRecipient"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Field(Base):
@@ -48,6 +51,21 @@ class Field(Base):
     owner: Mapped[User] = relationship(back_populates="fields")
     visit_requests: Mapped[list["VisitRequest"]] = relationship(back_populates="field", cascade="all, delete-orphan")
     posts: Mapped[list["Post"]] = relationship(back_populates="field", cascade="all, delete-orphan")
+    crop_seasons: Mapped[list["CropSeason"]] = relationship(back_populates="field", cascade="all, delete-orphan")
+    alerts: Mapped[list["Alert"]] = relationship(back_populates="field")
+
+
+class CropSeason(Base):
+    __tablename__ = "crop_seasons"
+    __table_args__ = (UniqueConstraint("field_id", "year", name="uq_crop_season_field_year"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    field_id: Mapped[int] = mapped_column(ForeignKey("fields.id", ondelete="CASCADE"), index=True)
+    year: Mapped[int] = mapped_column(Integer)
+    crop: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    field: Mapped[Field] = relationship(back_populates="crop_seasons")
 
 
 class VisitRequest(Base):
@@ -119,6 +137,57 @@ class Neighbor(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     neighbor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class Apiary(Base):
+    __tablename__ = "apiaries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    alert_radius_km: Mapped[int] = mapped_column(Integer, default=50)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    owner: Mapped[User] = relationship(back_populates="apiaries")
+    alert_recipients: Mapped[list["AlertRecipient"]] = relationship(back_populates="apiary")
+
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    field_id: Mapped[int | None] = mapped_column(ForeignKey("fields.id", ondelete="SET NULL"), nullable=True, index=True)
+    type: Mapped[str] = mapped_column(String(24), index=True)
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    radius_km: Mapped[int] = mapped_column(Integer)
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+    author: Mapped[User] = relationship(back_populates="alerts")
+    field: Mapped[Field | None] = relationship(back_populates="alerts")
+    recipients: Mapped[list["AlertRecipient"]] = relationship(back_populates="alert", cascade="all, delete-orphan")
+
+
+class AlertRecipient(Base):
+    __tablename__ = "alert_recipients"
+    __table_args__ = (UniqueConstraint("alert_id", "user_id", "apiary_id", name="uq_alert_recipient_apiary"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    alert_id: Mapped[int] = mapped_column(ForeignKey("alerts.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    apiary_id: Mapped[int | None] = mapped_column(ForeignKey("apiaries.id", ondelete="SET NULL"), nullable=True, index=True)
+    distance_km: Mapped[float] = mapped_column(Float)
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    alert: Mapped[Alert] = relationship(back_populates="recipients")
+    user: Mapped[User] = relationship(back_populates="alert_recipients")
+    apiary: Mapped[Apiary | None] = relationship(back_populates="alert_recipients")
 
 
 class ProductEvent(Base):
