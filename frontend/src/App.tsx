@@ -1,10 +1,13 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { HashRouter, Navigate, NavLink, Route, Routes } from 'react-router-dom'
 
+import { AlertsBell, AlertsPage } from './AlertsPage'
 import { api } from './api'
+import { ApiarySection } from './ApiarySection'
+import { CropRotation } from './CropRotation'
 import './features.css'
+import './stage89.css'
 import { FeedPage } from './FeedPage'
-import { MetricsPage } from './MetricsPage'
 import { NeighborsPage } from './NeighborsPage'
 import { Stage4Panel } from './Stage4Panel'
 import type { AgroField, FieldCreate, User, UserUpdate } from './types'
@@ -97,7 +100,10 @@ function AgroConnectApp() {
           <strong>AgroConnect</strong>
           <small>{currentUser.farm_name || currentUser.region}</small>
         </div>
-        <Avatar name={currentUser.name} small />
+        <div className="topbar-actions">
+          <AlertsBell user={currentUser} />
+          <Avatar name={currentUser.name} small />
+        </div>
       </header>
 
       <main className="content stage-content">
@@ -105,7 +111,7 @@ function AgroConnectApp() {
           <Route path="/feed" element={<FeedPage currentUser={currentUser} />} />
           <Route path="/fields" element={<FieldsPage user={currentUser} />} />
           <Route path="/neighbors" element={<NeighborsPage currentUser={currentUser} users={users} />} />
-          <Route path="/metrics" element={<MetricsPage />} />
+          <Route path="/alerts" element={<AlertsPage currentUser={currentUser} />} />
           <Route path="/profile" element={<ProfilePage user={currentUser} onSaved={replaceUser} onLogout={logout} />} />
           <Route path="*" element={<Navigate to="/feed" replace />} />
         </Routes>
@@ -180,7 +186,6 @@ function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: (user: 
           <strong>{completeness}%</strong>
         </div>
         <div className="completion-track"><span style={{ width: `${completeness}%` }} /></div>
-        <button className="secondary-button full-width" type="button" onClick={() => { window.location.hash = '#/metrics' }}>Метрики MVP</button>
       </div>
 
       <form className="form-card" onSubmit={submit}>
@@ -223,6 +228,8 @@ function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: (user: 
         <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем…' : 'Сохранить профиль'}</button>
         <button className="secondary-button full-width" type="button" onClick={onLogout}>Сменить тестового пользователя</button>
       </form>
+
+      {user.is_beekeeper && <ApiarySection user={user} />}
     </section>
   )
 }
@@ -267,7 +274,7 @@ function FieldsPage({ user }: { user: User }) {
   return (
     <section className="fields-page">
       <div className="section-heading">
-        <div><h1>Мои поля</h1><p>География — основа ленты и будущих предупреждений.</p></div>
+        <div><h1>Мои поля</h1><p>География, история культур и события хозяйства.</p></div>
         <button className="primary-button compact-button" onClick={() => setShowForm((value) => !value)}>{showForm ? 'Закрыть' : '+ Поле'}</button>
       </div>
       {showForm && (
@@ -275,9 +282,8 @@ function FieldsPage({ user }: { user: User }) {
           <h2>Новое поле</h2>
           <div className="two-columns">
             <FormField label="Название"><input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Северное поле" required /></FormField>
-            <FormField label="Культура"><input value={draft.crop} onChange={(e) => setDraft({ ...draft, crop: e.target.value })} placeholder="Пшеница" required /></FormField>
+            <FormField label="Текущая культура"><input value={draft.crop} onChange={(e) => setDraft({ ...draft, crop: e.target.value })} placeholder="Пшеница" required /></FormField>
           </div>
-          <FormField label="Севооборот (необязательно)"><input value={draft.rotation ?? ''} onChange={(e) => setDraft({ ...draft, rotation: e.target.value })} placeholder="Пар → пшеница → рапс" /></FormField>
           <div className="two-columns">
             <FormField label="Площадь, га (необязательно)"><input type="number" min="0.1" step="0.1" value={draft.area_ha ?? ''} onChange={(e) => setDraft({ ...draft, area_ha: e.target.value ? Number(e.target.value) : null })} /></FormField>
             <FormField label="Приватность"><select value={draft.privacy_variant ?? 'A'} onChange={(e) => setDraft({ ...draft, privacy_variant: e.target.value as 'A' | 'B' })}><option value="A">A — открыто</option><option value="B">B — детали по запросу</option></select></FormField>
@@ -292,20 +298,20 @@ function FieldsPage({ user }: { user: User }) {
         </form>
       )}
       {error && <div className="error-banner">{error}</div>}
-      {loading ? <p>Загрузка полей…</p> : fields.length === 0 ? <div className="empty-card"><strong>Пока нет полей</strong><p>Добавьте первое поле и привяжите его к местности.</p></div> : <div className="field-list">{fields.map((field) => <FieldCard key={field.id} field={field} />)}</div>}
+      {loading ? <p>Загрузка полей…</p> : fields.length === 0 ? <div className="empty-card"><strong>Пока нет полей</strong><p>Добавьте первое поле и привяжите его к местности.</p></div> : <div className="field-list">{fields.map((field) => <FieldCard key={field.id} field={field} user={user} />)}</div>}
       {!loading && <Stage4Panel user={user} fields={fields} onFieldChanged={replaceField} />}
     </section>
   )
 }
 
-function FieldCard({ field }: { field: AgroField }) {
+function FieldCard({ field, user }: { field: AgroField; user: User }) {
   return (
-    <article className="field-card">
+    <article className="field-card field-card-stage8">
       <MapPreview latitude={field.latitude} longitude={field.longitude} compact />
       <div className="field-card-body">
         <div className="field-title-row"><h2>{field.name}</h2><span className="crop-pill">{field.crop}</span></div>
         <div className="field-facts">{field.area_ha && <span>{field.area_ha} га</span>}<span>{field.latitude.toFixed(4)}, {field.longitude.toFixed(4)}</span><span>Приватность {field.privacy_variant}</span></div>
-        {field.rotation && <p className="muted">Севооборот: {field.rotation}</p>}
+        <CropRotation field={field} user={user} />
       </div>
     </article>
   )
