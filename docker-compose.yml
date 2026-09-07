@@ -19,6 +19,8 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://agroconnect:agroconnect@db:5432/agroconnect
+      WEATHER_PROVIDER: ${WEATHER_PROVIDER:-open_meteo}
+      OPEN_METEO_URL: ${OPEN_METEO_URL:-https://api.open-meteo.com/v1/forecast}
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ./backend:/app
