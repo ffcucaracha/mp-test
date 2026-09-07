@@ -3,6 +3,19 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import type { AgroField, AlertItem, User } from './types'
 
+function alertKind(item: AlertItem) {
+  if (item.type === 'weather') return '❄️ Погода'
+  if (item.type === 'disease') return '⚠️ Проблема'
+  return '🐝 Пестициды'
+}
+
+function alertLocation(item: AlertItem) {
+  if (item.type === 'pesticide') {
+    return `${item.field_name ? `Поле «${item.field_name}»` : 'Поле'} · ${item.distance_km ?? '?'} км от ${item.apiary_name ?? 'пасеки'}`
+  }
+  return item.field_name ? `Поле «${item.field_name}»` : 'Локальное предупреждение'
+}
+
 export function AlertsPage({ currentUser }: { currentUser: User }) {
   const [fields, setFields] = useState<AgroField[]>([])
   const [alerts, setAlerts] = useState<AlertItem[]>([])
@@ -69,6 +82,7 @@ export function AlertsPage({ currentUser }: { currentUser: User }) {
     try {
       const updated = await api.openAlert(item.id, currentUser.id)
       setAlerts((current) => current.map((alert) => (alert.id === updated.id ? updated : alert)))
+      window.dispatchEvent(new Event('agroconnect:alerts-changed'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось открыть предупреждение')
     }
@@ -87,7 +101,7 @@ export function AlertsPage({ currentUser }: { currentUser: User }) {
       <div className="section-heading">
         <div>
           <h1>Предупреждения</h1>
-          <p>Обработки полей рядом с пасекой и другие локальные события.</p>
+          <p>Погода, обработки полей рядом с пасекой и другие локальные события.</p>
         </div>
       </div>
 
@@ -131,15 +145,15 @@ export function AlertsPage({ currentUser }: { currentUser: User }) {
           <button className="secondary-button compact-button" type="button" onClick={() => void reloadAlerts()}>Обновить</button>
         </div>
 
-        {alerts.length === 0 ? <div className="empty-card"><strong>Новых предупреждений нет</strong><p>Когда рядом с вашей пасекой запланируют обработку, событие появится здесь.</p></div> : (
+        {alerts.length === 0 ? <div className="empty-card"><strong>Предупреждений пока нет</strong><p>Погодные риски и важные локальные события появятся здесь.</p></div> : (
           <div className="alert-list">
             {alerts.map((item) => (
               <article className={`alert-card ${item.is_opened ? 'opened' : 'unread'}`} key={item.id}>
                 <div className="alert-card-head">
                   <div>
-                    <span className="alert-kind">🐝 Пестициды</span>
+                    <span className="alert-kind">{alertKind(item)}</span>
                     <h3>{item.title}</h3>
-                    <p>{item.field_name ? `Поле «${item.field_name}»` : 'Поле'} · {item.distance_km ?? '?'} км от {item.apiary_name ?? 'пасеки'}</p>
+                    <p>{alertLocation(item)}</p>
                   </div>
                   {!item.is_opened && <span className="unread-dot" title="Не прочитано" />}
                 </div>
@@ -148,7 +162,7 @@ export function AlertsPage({ currentUser }: { currentUser: User }) {
                 <p className="muted">Автор: {item.author.name} · {item.author.farm_name || item.author.region}</p>
                 <div className="alert-actions">
                   {!item.is_opened && <button className="secondary-button compact-button" type="button" onClick={() => void openAlert(item)}>Отметить прочитанным</button>}
-                  <button className="primary-button compact-button" type="button" onClick={() => void showOwner(item)}>Связаться с владельцем поля</button>
+                  {item.type !== 'weather' && <button className="primary-button compact-button" type="button" onClick={() => void showOwner(item)}>Связаться с владельцем поля</button>}
                 </div>
               </article>
             ))}
@@ -173,7 +187,12 @@ export function AlertsBell({ user }: { user: User }) {
   const [count, setCount] = useState(0)
 
   useEffect(() => {
-    api.unreadAlerts(user.id).then((result) => setCount(result.count)).catch(() => setCount(0))
+    const load = () => {
+      api.unreadAlerts(user.id).then((result) => setCount(result.count)).catch(() => setCount(0))
+    }
+    load()
+    window.addEventListener('agroconnect:alerts-changed', load)
+    return () => window.removeEventListener('agroconnect:alerts-changed', load)
   }, [user.id])
 
   return (
