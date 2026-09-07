@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and start stack
-        run: docker compose up -d --build
+        run: WEATHER_PROVIDER=demo docker compose up -d --build
 
       - name: Wait for API
         run: |
@@ -234,12 +234,66 @@ jobs:
               assert json.load(f)['id'] == 2
           PY
 
+      - name: Verify weather provider and frost alerts
+        run: |
+          curl --fail -X POST http://localhost:8000/api/fields/1/weather/check \
+            -H 'Content-Type: application/json' \
+            -d '{"user_id":1,"frost_threshold_c":0,"hours":72}' > /tmp/weather.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/weather.json') as f:
+              weather = json.load(f)
+          assert weather['provider'] == 'demo'
+          assert weather['frost_risk'] is True
+          assert weather['min_temperature_c'] < 0
+          assert weather['alert_id'] is not None
+          assert weather['alert_created'] is True
+          PY
+
+          curl --fail -X POST http://localhost:8000/api/fields/1/weather/check \
+            -H 'Content-Type: application/json' \
+            -d '{"user_id":1,"frost_threshold_c":0,"hours":72}' > /tmp/weather-again.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/weather.json') as f:
+              first = json.load(f)
+          with open('/tmp/weather-again.json') as f:
+              second = json.load(f)
+          assert second['frost_risk'] is True
+          assert second['alert_created'] is False
+          assert second['alert_id'] == first['alert_id']
+          PY
+
+          curl --fail 'http://localhost:8000/api/alerts?user_id=1' > /tmp/alerts-weather.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/alerts-weather.json') as f:
+              alerts = json.load(f)
+          weather_alerts = [item for item in alerts if item['type'] == 'weather']
+          assert weather_alerts
+          assert weather_alerts[0]['title'] == 'Риск заморозков'
+          assert weather_alerts[0]['apiary_id'] is None
+          PY
+
+          curl --fail 'http://localhost:8000/api/internal/metrics' > /tmp/weather-metrics.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/weather-metrics.json') as f:
+              metrics = json.load(f)
+          events = metrics['events']
+          assert events.get('weather_forecast_checked', 0) >= 2
+          assert events.get('frost_risk_detected', 0) >= 2
+          assert events.get('weather_alert_created', 0) >= 1
+          assert events.get('weather_alert_deduplicated', 0) >= 1
+          PY
+
       - name: Verify browser metrics page
         run: |
           curl --fail http://localhost:8000/internal/metrics > /tmp/metrics.html
           grep -q 'AgroConnect' /tmp/metrics.html
           grep -q 'Сезоны севооборота' /tmp/metrics.html
           grep -q 'Пасеки' /tmp/metrics.html
+          grep -q 'weather_forecast_checked' /tmp/metrics.html
 
       - name: Verify frontend
         run: curl --fail http://localhost:5173
