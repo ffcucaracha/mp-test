@@ -2,9 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import router
+from .features import router as features_router
 from .seed import seed_data
 
-app = FastAPI(title="AgroConnect MVP API", version="0.2.0")
+app = FastAPI(title="AgroConnect MVP API", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,6 +16,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(features_router)
 
 
 @app.on_event("startup")
