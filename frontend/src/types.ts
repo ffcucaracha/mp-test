@@ -163,6 +163,31 @@ export type AlertCreate = {
   details: string
 }
 
+export type WeatherHour = {
+  time: string
+  temperature_c: number
+  apparent_temperature_c: number | null
+  precipitation_probability: number | null
+  wind_speed_kmh: number | null
+}
+
+export type FieldWeather = {
+  field_id: number
+  field_name: string
+  provider: string
+  checked_at: string
+  threshold_c: number
+  hours_requested: number
+  frost_risk: boolean
+  frost_starts_at: string | null
+  min_temperature_c: number
+  max_precipitation_probability: number | null
+  max_wind_speed_kmh: number | null
+  alert_id: number | null
+  alert_created: boolean
+  hours: WeatherHour[]
+}
+
 export type ProductEventSummary = {
   event_name: string
   user_id: number | null
