@@ -7,6 +7,7 @@ import type {
   CropSeason,
   FeedPost,
   FieldCreate,
+  FieldWeather,
   InternalMetrics,
   NeighborLink,
   PostCreate,
@@ -72,6 +73,11 @@ export const api = {
     request<CropSeason>(`/api/fields/${fieldId}/crop-seasons`, {
       method: 'POST',
       body: JSON.stringify({ user_id: userId, year, crop }),
+    }),
+  checkFieldWeather: (fieldId: number, userId: number, frostThresholdC = 0, hours = 72) =>
+    request<FieldWeather>(`/api/fields/${fieldId}/weather/check`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, frost_threshold_c: frostThresholdC, hours }),
     }),
   requestVisit: (fieldId: number, requesterId: number, message: string) =>
     request<VisitRequest>(`/api/fields/${fieldId}/visit-requests`, {
