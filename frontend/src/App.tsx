@@ -7,10 +7,12 @@ import { ApiarySection } from './ApiarySection'
 import { CropRotation } from './CropRotation'
 import './features.css'
 import './stage89.css'
+import './stage10.css'
 import { FeedPage } from './FeedPage'
 import { NeighborsPage } from './NeighborsPage'
 import { Stage4Panel } from './Stage4Panel'
 import type { AgroField, FieldCreate, User, UserUpdate } from './types'
+import { WeatherPanel } from './WeatherPanel'
 
 const RADII = [25, 50, 100, 200]
 
@@ -311,6 +313,7 @@ function FieldCard({ field, user }: { field: AgroField; user: User }) {
       <div className="field-card-body">
         <div className="field-title-row"><h2>{field.name}</h2><span className="crop-pill">{field.crop}</span></div>
         <div className="field-facts">{field.area_ha && <span>{field.area_ha} га</span>}<span>{field.latitude.toFixed(4)}, {field.longitude.toFixed(4)}</span><span>Приватность {field.privacy_variant}</span></div>
+        <WeatherPanel field={field} user={user} />
         <CropRotation field={field} user={user} />
       </div>
     </article>
