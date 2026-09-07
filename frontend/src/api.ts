@@ -1,5 +1,10 @@
 import type {
   AgroField,
+  AlertCreate,
+  AlertItem,
+  Apiary,
+  ApiaryCreate,
+  CropSeason,
   FeedPost,
   FieldCreate,
   InternalMetrics,
@@ -61,6 +66,13 @@ export const api = {
       body: JSON.stringify({ owner_id: ownerId, privacy_variant: privacyVariant }),
     }),
   publicFields: (viewerId: number) => request<PublicField[]>(`/api/public/fields?viewer_id=${viewerId}`),
+  cropSeasons: (fieldId: number, viewerId: number) =>
+    request<CropSeason[]>(`/api/fields/${fieldId}/crop-seasons?viewer_id=${viewerId}`),
+  addCropSeason: (fieldId: number, userId: number, year: number, crop: string) =>
+    request<CropSeason>(`/api/fields/${fieldId}/crop-seasons`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, year, crop }),
+    }),
   requestVisit: (fieldId: number, requesterId: number, message: string) =>
     request<VisitRequest>(`/api/fields/${fieldId}/visit-requests`, {
       method: 'POST',
@@ -98,5 +110,19 @@ export const api = {
     request<void>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'DELETE' }),
   neighborProfile: (userId: number, neighborUserId: number) =>
     request<User>(`/api/neighbors/${neighborUserId}/profile?user_id=${userId}`),
+  apiaries: (userId: number) => request<Apiary[]>(`/api/apiaries?user_id=${userId}`),
+  createApiary: (payload: ApiaryCreate) =>
+    request<Apiary>('/api/apiaries', { method: 'POST', body: JSON.stringify(payload) }),
+  alerts: (userId: number) => request<AlertItem[]>(`/api/alerts?user_id=${userId}`),
+  unreadAlerts: (userId: number) => request<{ count: number }>(`/api/alerts/unread-count?user_id=${userId}`),
+  createAlert: (payload: AlertCreate) =>
+    request<{ id: number; recipients: number }>('/api/alerts', { method: 'POST', body: JSON.stringify(payload) }),
+  openAlert: (alertId: number, userId: number) =>
+    request<AlertItem>(`/api/alerts/${alertId}/open`, {
+      method: 'PUT',
+      body: JSON.stringify({ user_id: userId }),
+    }),
+  alertOwner: (alertId: number, userId: number) =>
+    request<User>(`/api/alerts/${alertId}/owner-contact?user_id=${userId}`, { method: 'POST' }),
   metrics: () => request<InternalMetrics>('/api/internal/metrics'),
 }
