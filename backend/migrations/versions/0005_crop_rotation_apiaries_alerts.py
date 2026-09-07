@@ -1,6 +1,6 @@
 """crop rotation apiaries and alerts
 
-Revision ID: 0005_crop_rotation_apiaries_alerts
+Revision ID: 0005_crop_apiary_alerts
 Revises: 0004_analytics_neighbors
 Create Date: 2026-09-07
 """
@@ -8,7 +8,7 @@ Create Date: 2026-09-07
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0005_crop_rotation_apiaries_alerts"
+revision = "0005_crop_apiary_alerts"
 down_revision = "0004_analytics_neighbors"
 branch_labels = None
 depends_on = None
