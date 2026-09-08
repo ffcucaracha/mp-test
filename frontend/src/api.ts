@@ -8,6 +8,7 @@ import type {
   FeedPost,
   FieldCreate,
   FieldWeather,
+  GamificationMetrics,
   InternalMetrics,
   NeighborLink,
   PostCreate,
@@ -49,6 +50,7 @@ export const api = {
   health: () => request<{ status: string; service: string }>('/api/health'),
   users: () => request<User[]>('/api/users'),
   user: (userId: number) => request<User>(`/api/users/${userId}`),
+  gamification: (userId: number) => request<GamificationMetrics>(`/api/users/${userId}/gamification`),
   updateUser: (userId: number, payload: UserUpdate) =>
     request<User>(`/api/users/${userId}`, {
       method: 'PUT',
@@ -84,51 +86,27 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ requester_id: requesterId, message }),
     }),
-  incomingVisitRequests: (ownerId: number) =>
-    request<VisitRequest[]>(`/api/users/${ownerId}/visit-requests/incoming`),
-  outgoingVisitRequests: (requesterId: number) =>
-    request<VisitRequest[]>(`/api/users/${requesterId}/visit-requests/outgoing`),
+  incomingVisitRequests: (ownerId: number) => request<VisitRequest[]>(`/api/users/${ownerId}/visit-requests/incoming`),
+  outgoingVisitRequests: (requesterId: number) => request<VisitRequest[]>(`/api/users/${requesterId}/visit-requests/outgoing`),
   updateVisitRequest: (requestId: number, ownerId: number, requestStatus: Exclude<VisitRequestStatus, 'pending'>) =>
     request<VisitRequest>(`/api/visit-requests/${requestId}`, {
       method: 'PUT',
       body: JSON.stringify({ owner_id: ownerId, status: requestStatus }),
     }),
   feed: (viewerId: number) => request<FeedPost[]>(`/api/feed?viewer_id=${viewerId}`),
-  createPost: (payload: PostCreate) =>
-    request<FeedPost>('/api/posts', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
-  setReaction: (postId: number, userId: number, value: -1 | 1) =>
-    request<FeedPost>(`/api/posts/${postId}/reaction`, {
-      method: 'PUT',
-      body: JSON.stringify({ user_id: userId, value }),
-    }),
-  addComment: (postId: number, authorId: number, text: string) =>
-    request<FeedPost>(`/api/posts/${postId}/comments`, {
-      method: 'POST',
-      body: JSON.stringify({ author_id: authorId, text }),
-    }),
+  createPost: (payload: PostCreate) => request<FeedPost>('/api/posts', { method: 'POST', body: JSON.stringify(payload) }),
+  setReaction: (postId: number, userId: number, value: -1 | 1) => request<FeedPost>(`/api/posts/${postId}/reaction`, { method: 'PUT', body: JSON.stringify({ user_id: userId, value }) }),
+  addComment: (postId: number, authorId: number, text: string) => request<FeedPost>(`/api/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify({ author_id: authorId, text }) }),
   neighbors: (userId: number) => request<NeighborLink[]>(`/api/neighbors?user_id=${userId}`),
-  addNeighbor: (userId: number, neighborUserId: number) =>
-    request<NeighborLink>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'POST' }),
-  removeNeighbor: (userId: number, neighborUserId: number) =>
-    request<void>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'DELETE' }),
-  neighborProfile: (userId: number, neighborUserId: number) =>
-    request<User>(`/api/neighbors/${neighborUserId}/profile?user_id=${userId}`),
+  addNeighbor: (userId: number, neighborUserId: number) => request<NeighborLink>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'POST' }),
+  removeNeighbor: (userId: number, neighborUserId: number) => request<void>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'DELETE' }),
+  neighborProfile: (userId: number, neighborUserId: number) => request<User>(`/api/neighbors/${neighborUserId}/profile?user_id=${userId}`),
   apiaries: (userId: number) => request<Apiary[]>(`/api/apiaries?user_id=${userId}`),
-  createApiary: (payload: ApiaryCreate) =>
-    request<Apiary>('/api/apiaries', { method: 'POST', body: JSON.stringify(payload) }),
+  createApiary: (payload: ApiaryCreate) => request<Apiary>('/api/apiaries', { method: 'POST', body: JSON.stringify(payload) }),
   alerts: (userId: number) => request<AlertItem[]>(`/api/alerts?user_id=${userId}`),
   unreadAlerts: (userId: number) => request<{ count: number }>(`/api/alerts/unread-count?user_id=${userId}`),
-  createAlert: (payload: AlertCreate) =>
-    request<{ id: number; recipients: number }>('/api/alerts', { method: 'POST', body: JSON.stringify(payload) }),
-  openAlert: (alertId: number, userId: number) =>
-    request<AlertItem>(`/api/alerts/${alertId}/open`, {
-      method: 'PUT',
-      body: JSON.stringify({ user_id: userId }),
-    }),
-  alertOwner: (alertId: number, userId: number) =>
-    request<User>(`/api/alerts/${alertId}/owner-contact?user_id=${userId}`, { method: 'POST' }),
+  createAlert: (payload: AlertCreate) => request<{ id: number; recipients: number }>('/api/alerts', { method: 'POST', body: JSON.stringify(payload) }),
+  openAlert: (alertId: number, userId: number) => request<AlertItem>(`/api/alerts/${alertId}/open`, { method: 'PUT', body: JSON.stringify({ user_id: userId }) }),
+  alertOwner: (alertId: number, userId: number) => request<User>(`/api/alerts/${alertId}/owner-contact?user_id=${userId}`, { method: 'POST' }),
   metrics: () => request<InternalMetrics>('/api/internal/metrics'),
 }
