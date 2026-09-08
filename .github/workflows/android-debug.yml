@@ -45,8 +45,14 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Install WorkManager background sync bridge
+        run: npm run cap:patch-android
+
       - name: Verify bundled backend URL
         run: grep -R "10.0.2.2:8000" dist android/app/src/main/assets/public
+
+      - name: Verify background sync bridge
+        run: grep -R "NativeOutboxPlugin\|OutboxSyncWorker\|work-runtime" android/app/src/main/java android/app/build.gradle
 
       - name: Build debug APK
         run: cd android && ./gradlew assembleDebug
