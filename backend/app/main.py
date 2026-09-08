@@ -3,11 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api import router
 from .features import router as features_router
+from .plant_health_routes import router as plant_health_router
 from .product_metrics import router as product_metrics_router
 from .seed import seed_data
 from .weather_routes import router as weather_router
 
-app = FastAPI(title="AgroConnect MVP API", version="0.5.0")
+app = FastAPI(title="AgroConnect MVP API", version="0.6.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,6 +22,7 @@ app.include_router(router)
 app.include_router(product_metrics_router)
 app.include_router(features_router)
 app.include_router(weather_router)
+app.include_router(plant_health_router)
 
 
 @app.on_event("startup")
