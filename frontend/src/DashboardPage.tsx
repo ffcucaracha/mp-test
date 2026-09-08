@@ -16,6 +16,7 @@ type DashboardState = {
 }
 
 const EMPTY: DashboardState = { fields: [], alerts: [], feed: [], neighbors: [], pending: 0, weather: [] }
+const WEATHER_MAX_AGE_MS = 72 * 60 * 60 * 1000
 
 function formatTemperature(value: number) {
   return `${value > 0 ? '+' : ''}${value.toFixed(1)} °C`
@@ -41,6 +42,7 @@ export function DashboardPage({ currentUser }: { currentUser: User }) {
   const [preparing, setPreparing] = useState(false)
   const [progress, setProgress] = useState<FieldTripProgress | null>(null)
   const [tripMessage, setTripMessage] = useState('')
+  const [online, setOnline] = useState(navigator.onLine)
 
   const load = useCallback(async () => {
     setError('')
@@ -55,7 +57,8 @@ export function DashboardPage({ currentUser }: { currentUser: User }) {
     const fields = fieldsResult.status === 'fulfilled' ? fieldsResult.value : []
     const weather = (await Promise.all(fields.map(async (field) => {
       const cached = await getCacheEntry<FieldWeather>(`weather:${currentUser.id}:${field.id}`).catch(() => null)
-      return cached ? { field, value: cached.value, cachedAt: cached.cached_at } : null
+      if (!cached || Date.now() - cached.cached_at > WEATHER_MAX_AGE_MS) return null
+      return { field, value: cached.value, cachedAt: cached.cached_at }
     }))).filter((item): item is { field: AgroField; value: FieldWeather; cachedAt: number } => item !== null)
 
     setState({
@@ -75,13 +78,17 @@ export function DashboardPage({ currentUser }: { currentUser: User }) {
 
   useEffect(() => {
     void load()
+    const handleOnline = () => { setOnline(true); void load() }
+    const handleOffline = () => setOnline(false)
     const refresh = () => void load()
-    window.addEventListener('online', refresh)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
     window.addEventListener('agroconnect:alerts-changed', refresh)
     window.addEventListener('agroconnect:sync-complete', refresh)
     window.addEventListener('agroconnect:outbox-changed', refresh)
     return () => {
-      window.removeEventListener('online', refresh)
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
       window.removeEventListener('agroconnect:alerts-changed', refresh)
       window.removeEventListener('agroconnect:sync-complete', refresh)
       window.removeEventListener('agroconnect:outbox-changed', refresh)
@@ -105,7 +112,7 @@ export function DashboardPage({ currentUser }: { currentUser: User }) {
   }, [state.weather])
 
   async function prepareTrip() {
-    if (!navigator.onLine || preparing) return
+    if (!online || preparing) return
     setPreparing(true)
     setTripMessage('')
     setProgress({ done: 0, total: 1, label: 'Готовим данные…' })
@@ -126,16 +133,16 @@ export function DashboardPage({ currentUser }: { currentUser: User }) {
       <header className="dashboard-hero">
         <span className="dashboard-kicker">Сегодня в хозяйстве</span>
         <h1>{currentUser.farm_name || currentUser.name}</h1>
-        <p>{navigator.onLine ? 'Свежая сводка по полям и событиям рядом' : 'Офлайн · показываем последние сохранённые данные'}</p>
+        <p>{online ? 'Свежая сводка по полям и событиям рядом' : 'Офлайн · показываем последние сохранённые данные'}</p>
       </header>
 
       {error && <div className="dashboard-notice">{error}</div>}
 
-      <button className="field-trip-cta" type="button" onClick={() => void prepareTrip()} disabled={!navigator.onLine || preparing}>
+      <button className="field-trip-cta" type="button" onClick={() => void prepareTrip()} disabled={!online || preparing}>
         <span className="field-trip-cta-icon">🚜</span>
         <span>
           <strong>{preparing ? 'Готовим поездку…' : 'Поехал в поля'}</strong>
-          <small>{navigator.onLine ? 'Скачать погоду, карты и рабочие данные для офлайна' : 'Данные для поездки можно подготовить заранее при наличии сети'}</small>
+          <small>{online ? 'Скачать погоду, карты и рабочие данные для офлайна' : 'Данные для поездки можно подготовить заранее при наличии сети'}</small>
         </span>
       </button>
 
@@ -161,8 +168,8 @@ export function DashboardPage({ currentUser }: { currentUser: User }) {
           <span className="dashboard-card-icon">{weatherFocus?.value.frost_risk ? '❄️' : '🌤️'}</span>
           <div>
             <small>Погода</small>
-            <strong>{weatherFocus ? formatTemperature(weatherFocus.value.min_temperature_c) : 'Нет прогноза'}</strong>
-            <p>{weatherFocus ? `${weatherFocus.field.name} · ${weatherFocus.value.frost_risk ? 'риск заморозков' : `кэш ${ageLabel(weatherFocus.cachedAt)}`}` : 'Откройте поле онлайн, чтобы сохранить прогноз'}</p>
+            <strong>{weatherFocus ? formatTemperature(weatherFocus.value.min_temperature_c) : 'Нет актуального прогноза'}</strong>
+            <p>{weatherFocus ? `${weatherFocus.field.name} · ${weatherFocus.value.frost_risk ? 'риск заморозков' : `обновлено ${ageLabel(weatherFocus.cachedAt)}`}` : 'Подготовьте поездку онлайн, чтобы сохранить прогноз'}</p>
           </div>
         </a>
 
