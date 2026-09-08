@@ -120,6 +120,46 @@ export type PostCreate = {
   longitude: number
 }
 
+export type PlantHealthProviderName = 'kindwise' | 'gemini' | 'plantvillage' | 'demo'
+export type PlantHealthFeedbackStatus = 'pending' | 'accepted' | 'rejected' | 'corrected'
+
+export type PlantHealthProviderStatus = {
+  name: PlantHealthProviderName
+  label: string
+  configured: boolean
+  offline: boolean
+}
+
+export type PlantHealthProviders = {
+  default: PlantHealthProviderName
+  providers: PlantHealthProviderStatus[]
+}
+
+export type PlantHealthSuggestion = {
+  label: string
+  confidence: number
+  scientific_name: string | null
+  category: string | null
+  description: string | null
+}
+
+export type PlantHealthAnalysis = {
+  id: number
+  user_id: number
+  field_id: number
+  provider: PlantHealthProviderName
+  crop_hint: string
+  image_sha256: string
+  suggestions: PlantHealthSuggestion[]
+  top_label: string
+  top_confidence: number
+  feedback_status: PlantHealthFeedbackStatus
+  final_label: string | null
+  posted_post_id: number | null
+  created_at: string
+  feedback_at: string | null
+}
+
 export type NeighborLink = {
   user: User
   created_at: string
