@@ -14,6 +14,9 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      VITE_API_URL: http://10.0.2.2:8000
+      VITE_API_TIMEOUT_MS: 15000
 
     steps:
       - name: Checkout
@@ -23,6 +26,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -31,9 +36,9 @@ jobs:
           java-version: '21'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build web frontend
+      - name: Build web frontend for emulator
         run: npm run build
 
       - name: Create Android project
@@ -41,6 +46,9 @@ jobs:
 
       - name: Sync Capacitor
         run: npx cap sync android
+
+      - name: Verify bundled backend URL
+        run: grep -R "10.0.2.2:8000" dist android/app/src/main/assets/public
 
       - name: Build debug APK
         run: cd android && ./gradlew assembleDebug
@@ -50,3 +58,5 @@ jobs:
         with:
           name: agroconnect-debug-apk
           path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
