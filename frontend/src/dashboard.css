@@ -1,0 +1,164 @@
+.dashboard-page {
+  padding: 16px 16px 28px;
+  background: #f3f5f0;
+  color: #111813;
+}
+
+.dashboard-hero {
+  padding: 8px 2px 14px;
+}
+
+.dashboard-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: #245f37;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.dashboard-hero h1 {
+  margin: 0 0 5px;
+  font-size: clamp(26px, 7vw, 34px);
+  line-height: 1.08;
+  color: #111813;
+}
+
+.dashboard-hero p {
+  margin: 0;
+  color: #3e493f;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.field-trip-cta {
+  width: 100%;
+  min-height: 82px;
+  margin: 4px 0 14px;
+  padding: 14px 16px;
+  border: 2px solid #0f3d22;
+  border-radius: 18px;
+  background: #155f33;
+  color: #fff;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 13px;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.field-trip-cta:disabled {
+  background: #465148;
+  border-color: #303932;
+  opacity: 1;
+  cursor: default;
+}
+
+.field-trip-cta-icon { font-size: 32px; }
+.field-trip-cta strong { display: block; font-size: 20px; line-height: 1.15; }
+.field-trip-cta small { display: block; margin-top: 4px; color: #f3fff5; font-size: 13px; line-height: 1.25; }
+
+.dashboard-progress,
+.dashboard-trip-message,
+.dashboard-notice {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 2px solid #8e9a90;
+  border-radius: 14px;
+  background: #fff;
+  color: #172018;
+}
+
+.dashboard-progress progress { width: 100%; margin-top: 8px; accent-color: #155f33; }
+.dashboard-trip-message { border-color: #37744a; background: #f3fff5; font-weight: 650; }
+.dashboard-notice { border-color: #996d22; background: #fff8e8; }
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.dashboard-card {
+  min-height: 150px;
+  padding: 14px;
+  border: 2px solid #8e9a90;
+  border-radius: 16px;
+  background: #fff;
+  color: #111813;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.dashboard-card-icon { font-size: 29px; line-height: 1; }
+.dashboard-card small { display: block; color: #465148; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+.dashboard-card strong { display: block; margin-top: 4px; color: #111813; font-size: 18px; line-height: 1.15; }
+.dashboard-card p { margin: 7px 0 0; color: #303a32; font-size: 13px; line-height: 1.3; font-weight: 600; }
+.dashboard-card-alert { border-color: #a76400; background: #fff7df; }
+.dashboard-card-cold { border-color: #235d83; background: #eef8ff; }
+.dashboard-card-problem { border-color: #93413f; background: #fff1ef; }
+
+.dashboard-actions { margin-top: 18px; }
+.dashboard-actions h2 { margin: 0 0 9px; font-size: 18px; color: #111813; }
+.dashboard-action-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dashboard-action-row a {
+  min-height: 76px;
+  padding: 10px 7px;
+  border: 2px solid #8e9a90;
+  border-radius: 14px;
+  background: #fff;
+  color: #111813;
+  text-decoration: none;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  text-align: center;
+}
+.dashboard-action-row span { font-size: 24px; line-height: 1; }
+.dashboard-action-row strong { font-size: 12px; line-height: 1.15; }
+.dashboard-loading { margin-top: 12px; color: #303a32; font-weight: 650; }
+
+.bottom-nav.dashboard-nav {
+  grid-template-columns: repeat(5, 1fr);
+  background: #fff;
+  backdrop-filter: none;
+  border-top: 2px solid #9aa49c;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.bottom-nav.dashboard-nav a {
+  min-height: 54px;
+  border-radius: 10px;
+  color: #3d473f;
+  text-decoration: none;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.bottom-nav.dashboard-nav a span { font-size: 20px; line-height: 1; }
+.bottom-nav.dashboard-nav a.active { color: #0d542a; background: #e8f2e9; outline: 2px solid #4f775b; }
+
+@media (max-width: 390px) {
+  .dashboard-page { padding-left: 12px; padding-right: 12px; }
+  .dashboard-card { min-height: 142px; padding: 12px; }
+  .dashboard-card strong { font-size: 16px; }
+  .dashboard-action-row strong { font-size: 11px; }
+}
+
+@media (prefers-contrast: more) {
+  .dashboard-card,
+  .dashboard-action-row a,
+  .field-trip-cta,
+  .dashboard-progress,
+  .dashboard-trip-message,
+  .dashboard-notice { border-width: 3px; }
+}
