@@ -8,7 +8,9 @@ import { CropRotation } from './CropRotation'
 import './features.css'
 import './stage89.css'
 import './stage10.css'
+import './stage11.css'
 import { FeedPage } from './FeedPage'
+import { GamificationCard } from './GamificationCard'
 import { NeighborsPage } from './NeighborsPage'
 import { Stage4Panel } from './Stage4Panel'
 import type { AgroField, FieldCreate, User, UserUpdate } from './types'
@@ -189,6 +191,8 @@ function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: (user: 
         </div>
         <div className="completion-track"><span style={{ width: `${completeness}%` }} /></div>
       </div>
+
+      <GamificationCard user={user} />
 
       <form className="form-card" onSubmit={submit}>
         <h2>Профиль хозяйства</h2>
