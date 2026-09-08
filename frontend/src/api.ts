@@ -1,3 +1,4 @@
+import { getCacheEntry, putCacheEntry } from './offline'
 import type {
   AgroField,
   AlertCreate,
@@ -36,6 +37,8 @@ export type MonetizationEventName =
   | 'ad_free_offer_declined'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase()
+  const cacheKey = `api:${path}`
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
 
@@ -55,6 +58,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
     })
   } catch (error) {
+    if (method === 'GET') {
+      try {
+        const cached = await getCacheEntry<T>(cacheKey)
+        if (cached) return cached.value
+      } catch {
+        // IndexedDB can be unavailable in some embedded/private contexts.
+      }
+    }
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('Сервер не ответил вовремя. Проверьте сеть и доступность AgroConnect.')
     }
@@ -75,7 +86,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (response.status === 204) return undefined as T
-  return response.json() as Promise<T>
+  const body = await response.json() as T
+  if (method === 'GET') {
+    try { await putCacheEntry(cacheKey, body) } catch { /* cache is best-effort */ }
+  }
+  return body
 }
 
 export const api = {
