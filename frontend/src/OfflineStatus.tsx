@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { prepareFieldTrip, type FieldTripProgress } from './FieldTripPrep'
 import { OfflineDraftsPanel } from './OfflineDraftsPanel'
 import { getOutboxCount, syncOutbox } from './offline'
 import './offline-tools.css'
@@ -11,8 +10,6 @@ export function OfflineStatus() {
   const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState('')
   const [draftsOpen, setDraftsOpen] = useState(false)
-  const [preparing, setPreparing] = useState(false)
-  const [tripProgress, setTripProgress] = useState<FieldTripProgress | null>(null)
 
   const refreshCount = useCallback(async () => {
     try { setPending(await getOutboxCount()) } catch { setPending(0) }
@@ -30,24 +27,6 @@ export function OfflineStatus() {
       setSyncing(false)
     }
   }, [syncing])
-
-  async function prepareTrip() {
-    const rawUserId = localStorage.getItem('agroconnect.userId')
-    const userId = rawUserId ? Number(rawUserId) : 0
-    if (!userId || !navigator.onLine || preparing) return
-    setPreparing(true)
-    setMessage('')
-    setTripProgress({ done: 0, total: 1, label: 'Готовим данные…' })
-    try {
-      const result = await prepareFieldTrip(userId, setTripProgress)
-      setMessage(`К поездке готово: ${result.fields} полей, ${result.tiles} тайлов карты. Погода, севооборот, лента и предупреждения сохранены.`)
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Не удалось подготовить данные к поездке.')
-    } finally {
-      setPreparing(false)
-      setTripProgress(null)
-    }
-  }
 
   useEffect(() => {
     void refreshCount()
@@ -68,21 +47,11 @@ export function OfflineStatus() {
 
   return (
     <>
-      <div className="offline-tool-row">
-        <button type="button" className="field-trip-button" onClick={() => void prepareTrip()} disabled={!online || preparing}>
-          {preparing ? 'Готовим поездку…' : '🚜 Поехал в поля'}
-        </button>
+      <div className="offline-tool-row offline-tool-row-compact">
         <button type="button" className="drafts-button" onClick={() => setDraftsOpen(true)}>
           Черновики{pending > 0 ? ` · ${pending}` : ''}
         </button>
       </div>
-
-      {tripProgress && (
-        <div className="field-trip-progress" role="status">
-          <span>{tripProgress.label}</span>
-          <progress max={tripProgress.total} value={tripProgress.done} />
-        </div>
-      )}
 
       {(!online || pending > 0 || message) && (
         <div className={`offline-status ${online ? 'online' : 'offline'}`} role="status">
