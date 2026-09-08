@@ -7,6 +7,22 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/tile\.openstreetmap\.org\/\d+\/\d+\/\d+\.png$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'osm-field-tiles',
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: {
+                maxEntries: 180,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+              },
+            },
+          },
+        ],
+      },
       manifest: {
         name: 'AgroConnect MVP',
         short_name: 'AgroConnect',
