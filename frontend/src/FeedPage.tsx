@@ -3,6 +3,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } fro
 import { api } from './api'
 import './feed.css'
 import { MonetizationExperiment } from './MonetizationExperiment'
+import { enqueueMutation } from './offline'
 import { PlantHealthPanel } from './PlantHealthPanel'
 import type { AgroField, FeedPost, PlantHealthAnalysis, PostCreate, PostStatus, User } from './types'
 
@@ -16,6 +17,12 @@ const STATUS_OPTIONS: { value: PostStatus; label: string }[] = [
 ]
 
 const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((item) => [item.value, item.label])) as Record<PostStatus, string>
+
+function isNetworkError(error: unknown) {
+  if (!navigator.onLine) return true
+  if (!(error instanceof Error)) return false
+  return error.message.includes('Нет связи') || error.message.includes('не ответил вовремя')
+}
 
 export function FeedPage({ currentUser }: { currentUser: User }) {
   const [fields, setFields] = useState<AgroField[]>([])
@@ -69,20 +76,21 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [currentUser.id])
+
+  useEffect(() => {
+    const handleSync = () => { void reloadFeed().catch(() => undefined) }
+    window.addEventListener('agroconnect:sync-complete', handleSync)
+    return () => window.removeEventListener('agroconnect:sync-complete', handleSync)
+  }, [reloadFeed])
 
   const selectedField = useMemo(
     () => fields.find((field) => field.id === draft.field_id) ?? null,
     [draft.field_id, fields],
   )
 
-  const handleMlAnalysisChange = useCallback((analysis: PlantHealthAnalysis | null) => {
-    setMlAnalysis(analysis)
-  }, [])
-
+  const handleMlAnalysisChange = useCallback((analysis: PlantHealthAnalysis | null) => setMlAnalysis(analysis), [])
   const handleSuggestedText = useCallback((text: string) => {
     setDraft((current) => ({ ...current, text: current.text.trim() ? `${current.text.trim()}\n\n${text}` : text }))
   }, [])
@@ -91,12 +99,7 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
     const field = fields.find((item) => item.id === fieldId)
     if (!field) return
     setMlAnalysis(null)
-    setDraft((current) => ({
-      ...current,
-      field_id: field.id,
-      latitude: field.latitude,
-      longitude: field.longitude,
-    }))
+    setDraft((current) => ({ ...current, field_id: field.id, latitude: field.latitude, longitude: field.longitude }))
   }
 
   async function choosePhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -114,22 +117,40 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
     }
   }
 
+  function resetComposer() {
+    setDraft((current) => ({ ...current, text: '', status: 'problem', photo_data_url: '' }))
+    setMlAnalysis(null)
+    setPhotoName('')
+    setShowComposer(false)
+  }
+
+  async function saveOfflinePost(payload: PostCreate) {
+    await enqueueMutation('/api/posts', 'POST', payload, `Публикация с поля: ${selectedField?.name ?? 'поле'}`)
+    resetComposer()
+    setNotice('Нет связи. Публикация с фото сохранена на устройстве и будет отправлена автоматически после появления сети.')
+    if (mlAnalysis) {
+      setNotice((current) => `${current} ML-анализ и уведомление соседей требуют сети и не будут запускаться до повторного анализа.`)
+    }
+  }
+
   async function submitPost(event: FormEvent) {
     event.preventDefault()
-    if (!selectedField) {
-      setError('Сначала добавьте поле')
-      return
-    }
-    if (!draft.photo_data_url) {
-      setError('Добавьте фотографию')
-      return
-    }
+    if (!selectedField) { setError('Сначала добавьте поле'); return }
+    if (!draft.photo_data_url) { setError('Добавьте фотографию'); return }
 
+    const payload = { ...draft, author_id: currentUser.id }
     setSubmitting(true)
     setError('')
     setNotice('')
+
+    if (!navigator.onLine) {
+      try { await saveOfflinePost(payload) } catch (err) { setError(err instanceof Error ? err.message : 'Не удалось сохранить офлайн-черновик') }
+      finally { setSubmitting(false) }
+      return
+    }
+
     try {
-      const post = await api.createPost({ ...draft, author_id: currentUser.id })
+      const post = await api.createPost(payload)
       let mlMessage = ''
       if (mlAnalysis && ['accepted', 'corrected'].includes(mlAnalysis.feedback_status)) {
         try {
@@ -144,20 +165,15 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
           mlMessage = `Публикация создана, но ML-сценарий завершился не полностью: ${mlErr instanceof Error ? mlErr.message : 'ошибка'}`
         }
       }
-
-      setDraft((current) => ({
-        ...current,
-        text: '',
-        status: 'problem',
-        photo_data_url: '',
-      }))
-      setMlAnalysis(null)
-      setPhotoName('')
-      setShowComposer(false)
+      resetComposer()
       setNotice(mlMessage)
       await reloadFeed()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось опубликовать запись')
+      if (isNetworkError(err)) {
+        try { await saveOfflinePost(payload) } catch (queueErr) { setError(queueErr instanceof Error ? queueErr.message : 'Не удалось сохранить офлайн-черновик') }
+      } else {
+        setError(err instanceof Error ? err.message : 'Не удалось опубликовать запись')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -191,12 +207,7 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
           <h1>Лента рядом</h1>
           <p>Публикации из хозяйств в радиусе {currentUser.news_radius_km} км, выше — записи с лучшей оценкой.</p>
         </div>
-        <button
-          type="button"
-          className="primary-button compact-button"
-          disabled={fields.length === 0}
-          onClick={() => setShowComposer((value) => !value)}
-        >
+        <button type="button" className="primary-button compact-button" disabled={fields.length === 0} onClick={() => setShowComposer((value) => !value)}>
           {showComposer ? 'Закрыть' : '+ Публикация'}
         </button>
       </div>
@@ -204,138 +215,70 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
       <MonetizationExperiment currentUser={currentUser} />
 
       {fields.length === 0 && !loading && (
-        <div className="feed-info-card">
-          <strong>Для публикации нужно поле</strong>
-          <p>Перейдите в раздел «Поля», добавьте его и привяжите к географии.</p>
-        </div>
+        <div className="feed-info-card"><strong>Для публикации нужно поле</strong><p>Перейдите в раздел «Поля», добавьте его и привяжите к географии.</p></div>
       )}
 
       {showComposer && selectedField && (
         <form className="publication-composer" onSubmit={submitPost}>
           <div className="composer-title-row">
-            <div>
-              <span className="feed-kicker">Публикация с поля</span>
-              <h2>Что происходит?</h2>
-            </div>
+            <div><span className="feed-kicker">Публикация с поля</span><h2>Что происходит?</h2></div>
             <span className="field-location-chip">⌖ {selectedField.name}</span>
           </div>
 
           <div className="feed-form-grid">
-            <label className="feed-field">
-              <span>Поле</span>
-              <select value={draft.field_id} onChange={(e) => selectField(Number(e.target.value))}>
-                {fields.map((field) => (
-                  <option key={field.id} value={field.id}>{field.name} · {field.crop}</option>
-                ))}
-              </select>
-            </label>
-            <label className="feed-field">
-              <span>Статус</span>
-              <select
-                value={draft.status}
-                onChange={(e) => {
-                  const status = e.target.value as PostStatus
-                  if (status !== 'problem') setMlAnalysis(null)
-                  setDraft({ ...draft, status })
-                }}
-              >
-                {STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-            </label>
+            <label className="feed-field"><span>Поле</span><select value={draft.field_id} onChange={(e) => selectField(Number(e.target.value))}>
+              {fields.map((field) => <option key={field.id} value={field.id}>{field.name} · {field.crop}</option>)}
+            </select></label>
+            <label className="feed-field"><span>Статус</span><select value={draft.status} onChange={(e) => {
+              const status = e.target.value as PostStatus
+              if (status !== 'problem') setMlAnalysis(null)
+              setDraft({ ...draft, status })
+            }}>
+              {STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select></label>
           </div>
 
           <label className="photo-picker">
             <input type="file" accept="image/*" capture="environment" onChange={(event) => void choosePhoto(event)} />
-            {draft.photo_data_url ? (
-              <img src={draft.photo_data_url} alt="Предпросмотр публикации" />
-            ) : (
-              <span className="photo-placeholder">
-                <b>＋ Фото с поля</b>
-                <small>Камера или галерея</small>
-              </span>
+            {draft.photo_data_url ? <img src={draft.photo_data_url} alt="Предпросмотр публикации" /> : (
+              <span className="photo-placeholder"><b>＋ Фото с поля</b><small>Камера или галерея</small></span>
             )}
           </label>
           {photoName && <small className="photo-name">{photoName}</small>}
 
-          {draft.status === 'problem' && draft.photo_data_url && (
-            <PlantHealthPanel
-              userId={currentUser.id}
-              fieldId={selectedField.id}
-              imageDataUrl={draft.photo_data_url}
-              onAnalysisChange={handleMlAnalysisChange}
-              onSuggestedText={handleSuggestedText}
-            />
+          {draft.status === 'problem' && draft.photo_data_url && navigator.onLine && (
+            <PlantHealthPanel userId={currentUser.id} fieldId={selectedField.id} imageDataUrl={draft.photo_data_url} onAnalysisChange={handleMlAnalysisChange} onSuggestedText={handleSuggestedText} />
+          )}
+          {draft.status === 'problem' && draft.photo_data_url && !navigator.onLine && (
+            <div className="feed-info-card"><p>AI-анализ требует сети. Фото можно сохранить сейчас и проанализировать позже.</p></div>
           )}
 
           {mlAnalysis && ['accepted', 'corrected'].includes(mlAnalysis.feedback_status) && (
-            <label className="feed-field">
-              <span>
-                <input
-                  type="checkbox"
-                  checked={notifyNeighbors}
-                  onChange={(event) => setNotifyNeighbors(event.target.checked)}
-                />{' '}
-                После публикации предупредить моих соседей в радиусе
-              </span>
-            </label>
+            <label className="feed-field"><span><input type="checkbox" checked={notifyNeighbors} onChange={(event) => setNotifyNeighbors(event.target.checked)} />{' '}После публикации предупредить моих соседей в радиусе</span></label>
           )}
 
-          <label className="feed-field">
-            <span>Комментарий (необязательно)</span>
-            <textarea
-              rows={3}
-              value={draft.text}
-              onChange={(e) => setDraft({ ...draft, text: e.target.value })}
-              placeholder="Что заметили? Нужен совет?"
-            />
-          </label>
+          <label className="feed-field"><span>Комментарий (необязательно)</span><textarea rows={3} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} placeholder="Что заметили? Нужен совет?" /></label>
 
-          <div className="publication-meta">
-            <span>⌖ {draft.latitude.toFixed(4)}, {draft.longitude.toFixed(4)}</span>
-            <span>{selectedField.crop}</span>
-          </div>
-
-          <button className="primary-button full-width" type="submit" disabled={submitting}>
-            {submitting ? 'Публикуем…' : 'Опубликовать'}
-          </button>
+          <div className="publication-meta"><span>⌖ {draft.latitude.toFixed(4)}, {draft.longitude.toFixed(4)}</span><span>{selectedField.crop}</span></div>
+          <button className="primary-button full-width" type="submit" disabled={submitting}>{submitting ? 'Сохраняем…' : navigator.onLine ? 'Опубликовать' : 'Сохранить и отправить позже'}</button>
         </form>
       )}
 
       {error && <div className="error-banner">{error}</div>}
       {notice && <div className="feed-info-card"><p>{notice}</p></div>}
 
-      {loading ? (
-        <p>Загрузка ленты…</p>
-      ) : posts.length === 0 ? (
+      {loading ? <p>Загрузка ленты…</p> : posts.length === 0 ? (
         <div className="feed-info-card"><strong>В радиусе пока тихо</strong><p>Создайте первую публикацию с поля.</p></div>
       ) : (
         <div className="social-feed-list">
-          {posts.map((post) => (
-            <PostCard
-              key={post.id}
-              post={post}
-              currentUser={currentUser}
-              onReact={(value) => void react(post.id, value)}
-              onComment={(text) => comment(post.id, text)}
-            />
-          ))}
+          {posts.map((post) => <PostCard key={post.id} post={post} currentUser={currentUser} onReact={(value) => void react(post.id, value)} onComment={(text) => comment(post.id, text)} />)}
         </div>
       )}
     </section>
   )
 }
 
-function PostCard({
-  post,
-  currentUser,
-  onReact,
-  onComment,
-}: {
-  post: FeedPost
-  currentUser: User
-  onReact: (value: -1 | 1) => void
-  onComment: (text: string) => Promise<void>
-}) {
+function PostCard({ post, currentUser, onReact, onComment }: { post: FeedPost; currentUser: User; onReact: (value: -1 | 1) => void; onComment: (text: string) => Promise<void> }) {
   const [commentText, setCommentText] = useState('')
   const [commenting, setCommenting] = useState(false)
 
@@ -344,60 +287,26 @@ function PostCard({
     const text = commentText.trim()
     if (!text) return
     setCommenting(true)
-    try {
-      await onComment(text)
-      setCommentText('')
-    } finally {
-      setCommenting(false)
-    }
+    try { await onComment(text); setCommentText('') } finally { setCommenting(false) }
   }
 
   return (
     <article className="social-post-card">
       <div className="social-post-author">
         <Avatar name={post.author.name} />
-        <div>
-          <strong>{post.author.name}</strong>
-          <span>@{post.author.username} · {post.author.region}</span>
-        </div>
+        <div><strong>{post.author.name}</strong><span>@{post.author.username} · {post.author.region}</span></div>
         <span className={`post-score ${post.score < 0 ? 'negative' : ''}`}>score {post.score > 0 ? `+${post.score}` : post.score}</span>
       </div>
-
-      <div className="post-context-row">
-        <span className={`status-chip status-${post.status}`}>{STATUS_LABELS[post.status]}</span>
-        <span>{post.field_name} · {post.crop}</span>
-        {post.distance_km !== null && <span>⌖ {post.distance_km} км</span>}
-      </div>
-
+      <div className="post-context-row"><span className={`status-chip status-${post.status}`}>{STATUS_LABELS[post.status]}</span><span>{post.field_name} · {post.crop}</span>{post.distance_km !== null && <span>⌖ {post.distance_km} км</span>}</div>
       <img className="post-photo" src={post.photo_data_url} alt={`${STATUS_LABELS[post.status]} — ${post.crop}`} />
       {post.text && <p className="social-post-text">{post.text}</p>}
-
       <div className="reaction-row">
-        <button type="button" className={`reaction-button healthy ${post.viewer_reaction === 1 ? 'active' : ''}`} onClick={() => onReact(1)} aria-label="Здоровый колос">
-          <span>🌾</span><b>{post.healthy_count}</b><small>здорово</small>
-        </button>
-        <button type="button" className={`reaction-button wilted ${post.viewer_reaction === -1 ? 'active' : ''}`} onClick={() => onReact(-1)} aria-label="Увядший колос">
-          <span>🥀</span><b>{post.wilted_count}</b><small>проблема</small>
-        </button>
+        <button type="button" className={`reaction-button healthy ${post.viewer_reaction === 1 ? 'active' : ''}`} onClick={() => onReact(1)} aria-label="Здоровый колос"><span>🌾</span><b>{post.healthy_count}</b><small>здорово</small></button>
+        <button type="button" className={`reaction-button wilted ${post.viewer_reaction === -1 ? 'active' : ''}`} onClick={() => onReact(-1)} aria-label="Увядший колос"><span>🥀</span><b>{post.wilted_count}</b><small>проблема</small></button>
         <span className="comment-count">💬 {post.comments.length}</span>
       </div>
-
-      {post.comments.length > 0 && (
-        <div className="comment-list">
-          {post.comments.map((comment) => (
-            <div className="comment-item" key={comment.id}>
-              <Avatar name={comment.author.name} small />
-              <div><strong>{comment.author.name}</strong><p>{comment.text}</p></div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <form className="comment-form" onSubmit={submitComment}>
-        <Avatar name={currentUser.name} small />
-        <input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Ответить по делу…" maxLength={1000} />
-        <button type="submit" disabled={!commentText.trim() || commenting}>{commenting ? '…' : '↗'}</button>
-      </form>
+      {post.comments.length > 0 && <div className="comment-list">{post.comments.map((comment) => <div className="comment-item" key={comment.id}><Avatar name={comment.author.name} small /><div><strong>{comment.author.name}</strong><p>{comment.text}</p></div></div>)}</div>}
+      <form className="comment-form" onSubmit={submitComment}><Avatar name={currentUser.name} small /><input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Ответить по делу…" maxLength={1000} /><button type="submit" disabled={!commentText.trim() || commenting}>{commenting ? '…' : '↗'}</button></form>
     </article>
   )
 }
