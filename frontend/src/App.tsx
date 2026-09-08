@@ -283,6 +283,10 @@ function FieldsPage({ user }: { user: User }) {
     )
   }
 
+  function replaceField(updated: AgroField) {
+    setFields((current) => current.map((field) => (field.id === updated.id ? updated : field)))
+  }
+
   return (
     <section className="fields-stage">
       <div className="section-heading"><div><span className="eyebrow">Рабочий дневник</span><h1>Мои поля</h1><p>Координаты, культура, севооборот и погода доступны с последнего успешного обновления.</p></div></div>
@@ -293,7 +297,7 @@ function FieldsPage({ user }: { user: User }) {
           <FormField label="Название"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField>
           <FormField label="Культура"><input required value={form.crop} onChange={(e) => setForm({ ...form, crop: e.target.value })} /></FormField>
         </div>
-        <FormField label="Площадь, га"><input type="number" min="0" step="0.1" value={form.area_ha} onChange={(e) => setForm({ ...form, area_ha: Number(e.target.value) })} /></FormField>
+        <FormField label="Площадь, га"><input type="number" min="0" step="0.1" value={form.area_ha ?? ''} onChange={(e) => setForm({ ...form, area_ha: e.target.value === '' ? null : Number(e.target.value) })} /></FormField>
         <div className="coordinate-row">
           <FormField label="Широта"><input type="number" step="0.000001" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: Number(e.target.value) })} /></FormField>
           <FormField label="Долгота"><input type="number" step="0.000001" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: Number(e.target.value) })} /></FormField>
@@ -318,7 +322,7 @@ function FieldsPage({ user }: { user: User }) {
         </div>
       )}
 
-      <Stage4Panel user={user} fields={fields} onChanged={() => void reload()} />
+      <Stage4Panel user={user} fields={fields} onFieldChanged={replaceField} />
     </section>
   )
 }
