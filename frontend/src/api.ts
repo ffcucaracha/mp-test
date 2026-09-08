@@ -24,6 +24,7 @@ import type {
 } from './types'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS ?? 15000)
 
 export type MonetizationEventName =
   | 'premium_teaser_shown'
@@ -35,13 +36,32 @@ export type MonetizationEventName =
   | 'ad_free_offer_declined'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  })
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+
+  if (init?.signal) {
+    if (init.signal.aborted) controller.abort()
+    else init.signal.addEventListener('abort', () => controller.abort(), { once: true })
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Сервер не ответил вовремя. Проверьте сеть и доступность AgroConnect.')
+    }
+    throw new Error('Нет связи с AgroConnect. Проверьте сеть и адрес backend.')
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
 
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`
