@@ -21,6 +21,12 @@ services:
       DATABASE_URL: postgresql+psycopg://agroconnect:agroconnect@db:5432/agroconnect
       WEATHER_PROVIDER: ${WEATHER_PROVIDER:-open_meteo}
       OPEN_METEO_URL: ${OPEN_METEO_URL:-https://api.open-meteo.com/v1/forecast}
+      PLANT_HEALTH_PROVIDER: ${PLANT_HEALTH_PROVIDER:-kindwise}
+      CROP_HEALTH_API_KEY: ${CROP_HEALTH_API_KEY:-}
+      CROP_HEALTH_API_URL: ${CROP_HEALTH_API_URL:-https://crop.kindwise.com/api/v1/identification}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      PLANTVILLAGE_MODEL_DIR: ${PLANTVILLAGE_MODEL_DIR:-/app/models/plantvillage}
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ./backend:/app
