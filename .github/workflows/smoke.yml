@@ -287,12 +287,38 @@ jobs:
           assert events.get('weather_alert_deduplicated', 0) >= 1
           PY
 
+      - name: Verify gamification
+        run: |
+          curl --fail http://localhost:8000/api/users/1/gamification > /tmp/gamification.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/gamification.json') as f:
+              metrics = json.load(f)
+          assert 0 <= metrics['profile_completeness'] <= 100
+          assert isinstance(metrics['neighbors'], int)
+          assert metrics['weekly_activity_streak'] >= 1
+          assert isinstance(metrics['reputation'], int)
+          PY
+
+          curl --fail 'http://localhost:8000/api/internal/metrics' > /tmp/gamification-events.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/gamification-events.json') as f:
+              metrics = json.load(f)
+          assert metrics['events'].get('streak_viewed', 0) >= 1
+          assert metrics['events'].get('reputation_viewed', 0) >= 1
+          PY
+
       - name: Verify browser metrics page
         run: |
           curl --fail http://localhost:8000/internal/metrics > /tmp/metrics.html
           grep -q 'AgroConnect' /tmp/metrics.html
-          grep -q 'Сезоны севооборота' /tmp/metrics.html
-          grep -q 'Пасеки' /tmp/metrics.html
+          grep -q 'Активация' /tmp/metrics.html
+          grep -q 'Социальное ядро' /tmp/metrics.html
+          grep -q 'Предупреждения' /tmp/metrics.html
+          grep -q 'Приватность A/B' /tmp/metrics.html
+          grep -q 'Open rate' /tmp/metrics.html
+          grep -q 'streak_viewed' /tmp/metrics.html
           grep -q 'weather_forecast_checked' /tmp/metrics.html
 
       - name: Verify frontend
