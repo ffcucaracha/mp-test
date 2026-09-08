@@ -9,9 +9,12 @@ import './features.css'
 import './stage89.css'
 import './stage10.css'
 import './stage11.css'
+import './offline.css'
 import { FeedPage } from './FeedPage'
 import { GamificationCard } from './GamificationCard'
 import { NeighborsPage } from './NeighborsPage'
+import { OfflineMap } from './OfflineMap'
+import { OfflineStatus } from './OfflineStatus'
 import { Stage4Panel } from './Stage4Panel'
 import type { AgroField, FieldCreate, User, UserUpdate } from './types'
 import { WeatherPanel } from './WeatherPanel'
@@ -36,13 +39,34 @@ function AgroConnectApp() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([api.health(), api.users()])
-      .then(([, usersData]) => {
-        setServerOk(true)
-        setUsers(usersData)
+    let cancelled = false
+
+    api.users()
+      .then((usersData) => {
+        if (!cancelled) setUsers(usersData)
       })
-      .catch(() => setServerOk(false))
-      .finally(() => setLoading(false))
+      .catch(() => {
+        if (!cancelled) setUsers([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    if (!navigator.onLine) {
+      setServerOk(false)
+    } else {
+      api.health().then(() => setServerOk(true)).catch(() => setServerOk(false))
+    }
+
+    const online = () => api.health().then(() => setServerOk(true)).catch(() => setServerOk(false))
+    const offline = () => setServerOk(false)
+    window.addEventListener('online', online)
+    window.addEventListener('offline', offline)
+    return () => {
+      cancelled = true
+      window.removeEventListener('online', online)
+      window.removeEventListener('offline', offline)
+    }
   }, [])
 
   const currentUser = useMemo(
@@ -77,9 +101,12 @@ function AgroConnectApp() {
           <p className="muted">Рабочая сеть для сельхозпроизводителей</p>
           <div className={`server-status ${serverOk ? 'ok' : 'error'}`}>
             <span className="status-dot" />
-            {serverOk ? 'Сервер доступен' : 'Нет связи с сервером'}
+            {serverOk ? 'Сервер доступен' : navigator.onLine ? 'Нет связи с сервером' : 'Нет интернета'}
           </div>
           <h2>Выберите тестового пользователя</h2>
+          {users.length === 0 && !navigator.onLine && (
+            <p className="muted">Первый вход требует интернет. После первого успешного запуска профиль и рабочие данные доступны из локального кэша.</p>
+          )}
           <div className="user-list">
             {users.map((user) => (
               <button key={user.id} className="user-option" onClick={() => login(user.id)}>
@@ -110,6 +137,8 @@ function AgroConnectApp() {
         </div>
       </header>
 
+      <OfflineStatus />
+
       <main className="content stage-content">
         <Routes>
           <Route path="/feed" element={<FeedPage currentUser={currentUser} />} />
@@ -122,22 +151,10 @@ function AgroConnectApp() {
       </main>
 
       <nav className="bottom-nav bottom-nav-three">
-        <NavLink to="/feed" className={({ isActive }) => (isActive ? 'active' : '')}>
-          <span>⌂</span>
-          Лента
-        </NavLink>
-        <NavLink to="/fields" className={({ isActive }) => (isActive ? 'active' : '')}>
-          <span>⌖</span>
-          Поля
-        </NavLink>
-        <NavLink to="/neighbors" className={({ isActive }) => (isActive ? 'active' : '')}>
-          <span>◎</span>
-          Соседи
-        </NavLink>
-        <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
-          <span>○</span>
-          Профиль
-        </NavLink>
+        <NavLink to="/feed" className={({ isActive }) => (isActive ? 'active' : '')}><span>⌂</span>Лента</NavLink>
+        <NavLink to="/fields" className={({ isActive }) => (isActive ? 'active' : '')}><span>⌖</span>Поля</NavLink>
+        <NavLink to="/neighbors" className={({ isActive }) => (isActive ? 'active' : '')}><span>◎</span>Соседи</NavLink>
+        <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}><span>○</span>Профиль</NavLink>
       </nav>
     </div>
   )
@@ -179,16 +196,10 @@ function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: (user: 
       <div className="profile-summary-card">
         <div className="profile-head compact-profile-head">
           <Avatar name={user.name} large />
-          <div>
-            <h1>{user.name}</h1>
-            <div className="username">@{user.username}</div>
-          </div>
+          <div><h1>{user.name}</h1><div className="username">@{user.username}</div></div>
         </div>
         <div className="profile-stat-row"><span>Соседи</span><strong>{neighborCount}</strong></div>
-        <div className="completion-row">
-          <span>Полнота профиля</span>
-          <strong>{completeness}%</strong>
-        </div>
+        <div className="completion-row"><span>Полнота профиля</span><strong>{completeness}%</strong></div>
         <div className="completion-track"><span style={{ width: `${completeness}%` }} /></div>
       </div>
 
@@ -196,149 +207,140 @@ function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: (user: 
 
       <form className="form-card" onSubmit={submit}>
         <h2>Профиль хозяйства</h2>
-        <FormField label="Имя">
-          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        </FormField>
-        <FormField label="Регион">
-          <input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} />
-        </FormField>
-        <FormField label="Специализация">
-          <input value={form.specialization} onChange={(e) => setForm({ ...form, specialization: e.target.value })} />
-        </FormField>
-        <FormField label="Хозяйство">
-          <input value={form.farm_name} onChange={(e) => setForm({ ...form, farm_name: e.target.value })} />
-        </FormField>
-        <FormField label="О себе / хозяйстве">
-          <textarea rows={3} value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} />
-        </FormField>
+        <FormField label="Имя"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></FormField>
+        <FormField label="Регион"><input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} /></FormField>
+        <FormField label="Специализация"><input value={form.specialization} onChange={(e) => setForm({ ...form, specialization: e.target.value })} /></FormField>
+        <FormField label="Хозяйство"><input value={form.farm_name} onChange={(e) => setForm({ ...form, farm_name: e.target.value })} /></FormField>
+        <FormField label="О себе / хозяйстве"><textarea rows={3} value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} /></FormField>
 
         <label className="checkbox-row">
           <input type="checkbox" checked={form.is_beekeeper} onChange={(e) => setForm({ ...form, is_beekeeper: e.target.checked })} />
           <span><strong>У меня есть пасека</strong><small>Пчеловодство — дополнительный признак профиля, а не отдельная роль.</small></span>
         </label>
 
-        <div className="two-columns">
-          <FormField label="Получать новости в радиусе">
-            <select value={form.news_radius_km} onChange={(e) => setForm({ ...form, news_radius_km: Number(e.target.value) })}>
-              {RADII.map((radius) => <option key={radius} value={radius}>{radius} км</option>)}
-            </select>
-          </FormField>
-          <FormField label="Транслировать предупреждения">
-            <select value={form.broadcast_radius_km} onChange={(e) => setForm({ ...form, broadcast_radius_km: Number(e.target.value) })}>
-              {RADII.map((radius) => <option key={radius} value={radius}>{radius} км</option>)}
-            </select>
-          </FormField>
-        </div>
+        <FormField label="Радиус новостей, км">
+          <select value={form.news_radius_km} onChange={(e) => setForm({ ...form, news_radius_km: Number(e.target.value) })}>
+            {RADII.map((radius) => <option key={radius}>{radius}</option>)}
+          </select>
+        </FormField>
+        <FormField label="Радиус предупреждений, км">
+          <select value={form.broadcast_radius_km} onChange={(e) => setForm({ ...form, broadcast_radius_km: Number(e.target.value) })}>
+            {RADII.map((radius) => <option key={radius}>{radius}</option>)}
+          </select>
+        </FormField>
 
-        {message && <div className="form-message">{message}</div>}
         <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем…' : 'Сохранить профиль'}</button>
-        <button className="secondary-button full-width" type="button" onClick={onLogout}>Сменить тестового пользователя</button>
+        {message && <p className="form-message">{message}</p>}
       </form>
 
       {user.is_beekeeper && <ApiarySection user={user} />}
+
+      <button type="button" className="secondary-button logout-button" onClick={onLogout}>Сменить пользователя</button>
     </section>
   )
 }
 
 function FieldsPage({ user }: { user: User }) {
   const [fields, setFields] = useState<AgroField[]>([])
+  const [form, setForm] = useState<FieldCreate>({ name: '', crop: '', area_ha: 0, latitude: 54.9924, longitude: 73.3686 })
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [locating, setLocating] = useState(false)
-  const [draft, setDraft] = useState<FieldCreate>({
-    name: '', crop: '', rotation: '', latitude: 54.9914, longitude: 73.3645, area_ha: null, privacy_variant: 'A',
-  })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
 
-  useEffect(() => {
+  async function reload() {
     setLoading(true)
-    api.fields(user.id).then(setFields).catch((err) => setError(err instanceof Error ? err.message : 'Не удалось загрузить поля')).finally(() => setLoading(false))
-  }, [user.id])
+    try { setFields(await api.fields(user.id)) }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Не удалось загрузить поля') }
+    finally { setLoading(false) }
+  }
 
-  function detectLocation() {
-    if (!navigator.geolocation) { setError('Геолокация не поддерживается устройством'); return }
-    setLocating(true); setError('')
+  useEffect(() => { void reload() }, [user.id])
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setSaving(true)
+    setMessage('')
+    try {
+      await api.createField(user.id, form)
+      setForm({ ...form, name: '', crop: '', area_ha: 0 })
+      setMessage('Поле добавлено')
+      await reload()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Не удалось добавить поле')
+    } finally { setSaving(false) }
+  }
+
+  function useGeolocation() {
+    if (!navigator.geolocation) { setMessage('Геолокация не поддерживается'); return }
+    setMessage('Определяем координаты…')
     navigator.geolocation.getCurrentPosition(
-      (position) => { setDraft((current) => ({ ...current, latitude: position.coords.latitude, longitude: position.coords.longitude })); setLocating(false) },
-      () => { setError('Не удалось получить геопозицию. Координаты можно указать вручную.'); setLocating(false) },
+      (position) => {
+        setForm((current) => ({ ...current, latitude: position.coords.latitude, longitude: position.coords.longitude }))
+        setMessage('Координаты определены')
+      },
+      () => setMessage('Не удалось определить геопозицию'),
       { enableHighAccuracy: true, timeout: 10000 },
     )
   }
 
-  async function createField(event: FormEvent) {
-    event.preventDefault(); setError('')
-    try {
-      const created = await api.createField(user.id, draft)
-      setFields((current) => [...current, created])
-      setDraft({ name: '', crop: '', rotation: '', latitude: created.latitude, longitude: created.longitude, area_ha: null, privacy_variant: 'A' })
-      setShowForm(false)
-    } catch (err) { setError(err instanceof Error ? err.message : 'Не удалось создать поле') }
-  }
-
-  function replaceField(updated: AgroField) { setFields((current) => current.map((field) => (field.id === updated.id ? updated : field))) }
-
   return (
-    <section className="fields-page">
-      <div className="section-heading">
-        <div><h1>Мои поля</h1><p>География, история культур и события хозяйства.</p></div>
-        <button className="primary-button compact-button" onClick={() => setShowForm((value) => !value)}>{showForm ? 'Закрыть' : '+ Поле'}</button>
-      </div>
-      {showForm && (
-        <form className="form-card field-form" onSubmit={createField}>
-          <h2>Новое поле</h2>
-          <div className="two-columns">
-            <FormField label="Название"><input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Северное поле" required /></FormField>
-            <FormField label="Текущая культура"><input value={draft.crop} onChange={(e) => setDraft({ ...draft, crop: e.target.value })} placeholder="Пшеница" required /></FormField>
-          </div>
-          <div className="two-columns">
-            <FormField label="Площадь, га (необязательно)"><input type="number" min="0.1" step="0.1" value={draft.area_ha ?? ''} onChange={(e) => setDraft({ ...draft, area_ha: e.target.value ? Number(e.target.value) : null })} /></FormField>
-            <FormField label="Приватность"><select value={draft.privacy_variant ?? 'A'} onChange={(e) => setDraft({ ...draft, privacy_variant: e.target.value as 'A' | 'B' })}><option value="A">A — открыто</option><option value="B">B — детали по запросу</option></select></FormField>
-          </div>
-          <button type="button" className="location-button" onClick={detectLocation} disabled={locating}>{locating ? 'Определяем…' : '⌖ Использовать мою геопозицию'}</button>
-          <div className="two-columns">
-            <FormField label="Широта"><input type="number" step="0.000001" value={draft.latitude} onChange={(e) => setDraft({ ...draft, latitude: Number(e.target.value) })} required /></FormField>
-            <FormField label="Долгота"><input type="number" step="0.000001" value={draft.longitude} onChange={(e) => setDraft({ ...draft, longitude: Number(e.target.value) })} required /></FormField>
-          </div>
-          <MapPreview latitude={draft.latitude} longitude={draft.longitude} />
-          <button className="primary-button" type="submit">Сохранить поле</button>
-        </form>
+    <section className="fields-stage">
+      <div className="section-heading"><div><span className="eyebrow">Рабочий дневник</span><h1>Мои поля</h1><p>Координаты, культура, севооборот и погода доступны с последнего успешного обновления.</p></div></div>
+
+      <form className="form-card field-form" onSubmit={submit}>
+        <h2>Добавить поле</h2>
+        <div className="two-columns">
+          <FormField label="Название"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField>
+          <FormField label="Культура"><input required value={form.crop} onChange={(e) => setForm({ ...form, crop: e.target.value })} /></FormField>
+        </div>
+        <FormField label="Площадь, га"><input type="number" min="0" step="0.1" value={form.area_ha} onChange={(e) => setForm({ ...form, area_ha: Number(e.target.value) })} /></FormField>
+        <div className="coordinate-row">
+          <FormField label="Широта"><input type="number" step="0.000001" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: Number(e.target.value) })} /></FormField>
+          <FormField label="Долгота"><input type="number" step="0.000001" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: Number(e.target.value) })} /></FormField>
+        </div>
+        <button type="button" className="secondary-button" onClick={useGeolocation}>⌖ Моя геопозиция</button>
+        <OfflineMap latitude={form.latitude} longitude={form.longitude} />
+        <button className="primary-button" type="submit" disabled={saving || !navigator.onLine}>{saving ? 'Сохраняем…' : navigator.onLine ? 'Добавить поле' : 'Добавление поля требует сети'}</button>
+        {message && <p className="form-message">{message}</p>}
+      </form>
+
+      {loading ? <p>Загрузка полей…</p> : (
+        <div className="field-list">
+          {fields.map((field) => (
+            <article className="field-card" key={field.id}>
+              <div className="field-card-heading"><div><h2>{field.name}</h2><p>{field.crop} · {field.area_ha} га</p></div><span className="privacy-chip">{field.privacy_variant === 'B' ? 'Доступ по запросу' : 'Публично'}</span></div>
+              <OfflineMap latitude={field.latitude} longitude={field.longitude} compact />
+              <div className="coordinates">⌖ {field.latitude.toFixed(5)}, {field.longitude.toFixed(5)}</div>
+              <WeatherPanel field={field} user={user} />
+              <CropRotation field={field} user={user} />
+            </article>
+          ))}
+        </div>
       )}
-      {error && <div className="error-banner">{error}</div>}
-      {loading ? <p>Загрузка полей…</p> : fields.length === 0 ? <div className="empty-card"><strong>Пока нет полей</strong><p>Добавьте первое поле и привяжите его к местности.</p></div> : <div className="field-list">{fields.map((field) => <FieldCard key={field.id} field={field} user={user} />)}</div>}
-      {!loading && <Stage4Panel user={user} fields={fields} onFieldChanged={replaceField} />}
+
+      <Stage4Panel user={user} fields={fields} onChanged={() => void reload()} />
     </section>
   )
 }
 
-function FieldCard({ field, user }: { field: AgroField; user: User }) {
-  return (
-    <article className="field-card field-card-stage8">
-      <MapPreview latitude={field.latitude} longitude={field.longitude} compact />
-      <div className="field-card-body">
-        <div className="field-title-row"><h2>{field.name}</h2><span className="crop-pill">{field.crop}</span></div>
-        <div className="field-facts">{field.area_ha && <span>{field.area_ha} га</span>}<span>{field.latitude.toFixed(4)}, {field.longitude.toFixed(4)}</span><span>Приватность {field.privacy_variant}</span></div>
-        <WeatherPanel field={field} user={user} />
-        <CropRotation field={field} user={user} />
-      </div>
-    </article>
-  )
-}
-
-function MapPreview({ latitude, longitude, compact = false }: { latitude: number; longitude: number; compact?: boolean }) {
-  const delta = compact ? 0.03 : 0.02
-  const bbox = `${longitude - delta},${latitude - delta},${longitude + delta},${latitude + delta}`
-  const src = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${latitude}%2C${longitude}`
-  return <iframe className={`map-preview ${compact ? 'compact' : ''}`} src={src} title={`Карта ${latitude}, ${longitude}`} loading="lazy" />
-}
-
-function FormField({ label, children }: { label: string; children: React.ReactNode }) { return <label className="form-field"><span>{label}</span>{children}</label> }
-
-function toUserUpdate(user: User): UserUpdate {
-  return { name: user.name, region: user.region, specialization: user.specialization, farm_name: user.farm_name, bio: user.bio, is_beekeeper: user.is_beekeeper, news_radius_km: user.news_radius_km, broadcast_radius_km: user.broadcast_radius_km }
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="form-field"><span>{label}</span>{children}</label>
 }
 
 function Avatar({ name, small = false, large = false }: { name: string; small?: boolean; large?: boolean }) {
-  const initials = name.split(' ').map((part) => part[0]).join('').slice(0, 2)
-  const className = ['avatar', small ? 'small' : '', large ? 'large' : ''].filter(Boolean).join(' ')
-  return <div className={className}>{initials}</div>
+  const initials = name.split(' ').map((item) => item[0]).join('').slice(0, 2).toUpperCase()
+  return <div className={`avatar ${small ? 'small' : ''} ${large ? 'large' : ''}`}>{initials}</div>
+}
+
+function toUserUpdate(user: User): UserUpdate {
+  return {
+    name: user.name,
+    region: user.region,
+    specialization: user.specialization,
+    farm_name: user.farm_name,
+    bio: user.bio,
+    is_beekeeper: user.is_beekeeper,
+    news_radius_km: user.news_radius_km,
+    broadcast_radius_km: user.broadcast_radius_km,
+  }
 }
