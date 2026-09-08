@@ -1,0 +1,55 @@
+.gamification-card {
+  background: #fff;
+  border: 1px solid #dfe7df;
+  border-radius: 18px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.gamification-heading h2 {
+  margin: 0 0 4px;
+}
+
+.gamification-heading p,
+.gamification-note {
+  margin: 0;
+  color: #667166;
+}
+
+.gamification-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.gamification-metric {
+  min-width: 0;
+  padding: 13px 12px;
+  border-radius: 14px;
+  background: #f4f8f3;
+  display: grid;
+  gap: 5px;
+}
+
+.gamification-metric strong {
+  font-size: 22px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.gamification-metric span {
+  color: #667166;
+  font-size: 13px;
+}
+
+.gamification-note {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .gamification-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
