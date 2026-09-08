@@ -1,0 +1,74 @@
+/* Stage 15: Android/mobile ergonomics and offline-risk hardening. */
+:root {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+.topbar {
+  padding-top: calc(10px + env(safe-area-inset-top));
+  min-height: calc(64px + env(safe-area-inset-top));
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+button,
+.primary-button,
+.secondary-button,
+.location-button,
+.reaction-button {
+  min-height: 44px;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(31, 107, 59, 0.28);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .content {
+    font-size: 16px;
+  }
+
+  .primary-button,
+  .secondary-button {
+    padding-top: 11px;
+    padding-bottom: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
