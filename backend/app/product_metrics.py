@@ -11,7 +11,19 @@ from sqlalchemy.orm import Session
 
 from .analytics import track
 from .database import get_db
-from .models import Alert, AlertRecipient, CropSeason, Field, Neighbor, Post, ProductEvent, Reaction, User, VisitRequest
+from .models import (
+    Alert,
+    AlertRecipient,
+    CropSeason,
+    Field,
+    Neighbor,
+    PlantHealthAnalysis,
+    Post,
+    ProductEvent,
+    Reaction,
+    User,
+    VisitRequest,
+)
 
 router = APIRouter()
 
@@ -33,6 +45,9 @@ MEANINGFUL_ACTIVITY_EVENTS = {
     "apiary_created",
     "alert_created",
     "weather_alert_created",
+    "ml_result_accepted",
+    "ml_result_corrected",
+    "post_created_after_ml",
 }
 
 
@@ -172,6 +187,20 @@ def internal_metrics_data(db: Session) -> dict:
         select(func.count(AlertRecipient.id)).where(AlertRecipient.opened_at.is_not(None))
     ) or 0
 
+    ml_analyses = db.scalar(select(func.count(PlantHealthAnalysis.id))) or 0
+    ml_labeled = db.scalar(
+        select(func.count(PlantHealthAnalysis.id)).where(PlantHealthAnalysis.final_label.is_not(None))
+    ) or 0
+    ml_corrected = db.scalar(
+        select(func.count(PlantHealthAnalysis.id)).where(PlantHealthAnalysis.feedback_status == "corrected")
+    ) or 0
+    ml_rejected = db.scalar(
+        select(func.count(PlantHealthAnalysis.id)).where(PlantHealthAnalysis.feedback_status == "rejected")
+    ) or 0
+    provider_rows = db.execute(
+        select(PlantHealthAnalysis.provider, func.count(PlantHealthAnalysis.id)).group_by(PlantHealthAnalysis.provider)
+    ).all()
+
     recent = list(
         db.scalars(
             select(ProductEvent).order_by(ProductEvent.created_at.desc(), ProductEvent.id.desc()).limit(40)
@@ -202,6 +231,7 @@ def internal_metrics_data(db: Session) -> dict:
             "open_rate": _pct(int(opens), int(deliveries)),
             "pesticide": db.scalar(select(func.count(Alert.id)).where(Alert.type == "pesticide")) or 0,
             "weather": db.scalar(select(func.count(Alert.id)).where(Alert.type == "weather")) or 0,
+            "disease": db.scalar(select(func.count(Alert.id)).where(Alert.type == "disease")) or 0,
             "owner_contact_opens": events.get("owner_contact_opened", 0),
         },
         "privacy": {
@@ -212,7 +242,14 @@ def internal_metrics_data(db: Session) -> dict:
             "starts": events.get("ml_started", 0),
             "shown": events.get("ml_result_shown", 0),
             "accepted": events.get("ml_result_accepted", 0),
-            "rejected": events.get("ml_result_rejected", 0),
+            "rejected": int(ml_rejected),
+            "corrected": int(ml_corrected),
+            "analyses": int(ml_analyses),
+            "labeled": int(ml_labeled),
+            "label_rate": _pct(int(ml_labeled), int(ml_analyses)),
+            "posts_after_ml": events.get("post_created_after_ml", 0),
+            "neighbor_warnings": events.get("ml_neighbor_warning_sent", 0),
+            "providers": {name: count for name, count in provider_rows},
         },
         "events": events,
         "recent_events": recent,
@@ -236,6 +273,7 @@ def metrics_html(db: Session = Depends(get_db)) -> HTMLResponse:
     activation = metrics["activation"]
     social = metrics["social"]
     alerts = metrics["alerts"]
+    ml = metrics["ml"]
     privacy_a = metrics["privacy"]["A"]
     privacy_b = metrics["privacy"]["B"]
 
@@ -260,6 +298,10 @@ def metrics_html(db: Session = Depends(get_db)) -> HTMLResponse:
         _privacy_row("Просмотры деталей", privacy_a["detailed_field_views"], privacy_b["detailed_field_views"]),
         _privacy_row("Скрытые просмотры", privacy_a["hidden_field_views"], privacy_b["hidden_field_views"]),
     ])
+    provider_rows = "".join(
+        f"<tr><td><code>{escape(str(name))}</code></td><td>{count}</td></tr>"
+        for name, count in sorted(ml["providers"].items())
+    ) or "<tr><td colspan='2'>Пока нет анализов</td></tr>"
 
     html = f"""<!doctype html>
 <html lang='ru'>
@@ -271,15 +313,17 @@ body{{font-family:system-ui,sans-serif;margin:0;background:#f5f7f4;color:#1f2a22
 h1{{margin-bottom:4px}}h2{{margin-top:30px}}.muted{{color:#667166}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}}
 .card{{background:#fff;border:1px solid #dfe7df;border-radius:14px;padding:16px;display:grid;gap:5px}}.card strong{{font-size:26px}}.card span{{color:#667166}}
 table{{width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden}}th,td{{text-align:left;padding:10px 12px;border-bottom:1px solid #edf0ed}}th{{background:#eef4ee}}
-.note{{background:#fff7df;border:1px solid #eadca9;border-radius:12px;padding:12px 14px;margin:14px 0}}code{{font-size:.92em}}
+.note{{background:#fff7df;border:1px solid #eadca9;border-radius:12px;padding:12px 14px;margin:14px 0}}code{{font-size:.92em}}a{{color:#2f633c}}
 </style></head><body><main>
 <h1>AgroConnect — метрики MVP</h1><p class='muted'>Внутренний браузерный экран. В мобильное приложение не встроен.</p>
 <h2>Активация</h2>{_cards([('Пользователи',activation['users']),('Профили заполнены',activation['profiles_completed']),('Полнота профилей',f"{activation['profile_completion_rate']}%"),('Поля',activation['fields']),('Поля с географией',activation['fields_with_location']),('География заполнена',f"{activation['field_location_completion_rate']}%")])}
 <h2>Социальное ядро</h2>{_cards([('Публикации',social['posts']),('Просмотры постов',social['post_views']),('Открытия ленты',social['feed_opens']),('Реакции',social['reactions']),('Комментарии',social['comments']),('Соседи',social['neighbors'])])}
-<h2>Предупреждения</h2>{_cards([('Создано',alerts['created']),('Получено',alerts['received']),('Открыто',alerts['opened']),('Open rate',f"{alerts['open_rate']}%"),('Пестициды',alerts['pesticide']),('Погода',alerts['weather']),('Открыт контакт владельца',alerts['owner_contact_opens'])])}
+<h2>Предупреждения</h2>{_cards([('Создано',alerts['created']),('Получено',alerts['received']),('Открыто',alerts['opened']),('Open rate',f"{alerts['open_rate']}%"),('Пестициды',alerts['pesticide']),('Погода',alerts['weather']),('Болезни',alerts['disease']),('Открыт контакт владельца',alerts['owner_contact_opens'])])}
 <h2>Приватность A/B</h2><div class='note'>В текущем MVP вариант приватности привязан к полю, а не к пользователю. Поэтому «доля созданных полей» считается среди всех полей.</div>
 <table><thead><tr><th>Метрика</th><th>Вариант A</th><th>Вариант B</th></tr></thead><tbody>{privacy_rows}</tbody></table>
-<h2>ML-воронка</h2>{_cards([('Запуски',metrics['ml']['starts']),('Результат показан',metrics['ml']['shown']),('Принято',metrics['ml']['accepted']),('Отклонено',metrics['ml']['rejected'])])}
+<h2>ML и собственный датасет</h2>{_cards([('Запуски',ml['starts']),('Результат показан',ml['shown']),('Анализов сохранено',ml['analyses']),('Размечено',ml['labeled']),('Доля разметки',f"{ml['label_rate']}%"),('Подтверждено',ml['accepted']),('Исправлено',ml['corrected']),('Отклонено',ml['rejected']),('Постов после ML',ml['posts_after_ml']),('Предупреждений соседям',ml['neighbor_warnings'])])}
+<div class='note'>Фото, предсказания провайдера и подтверждённая/исправленная пользователем метка сохраняются как обучающие примеры. <a href='/api/ml/dataset?labeled_only=true'>Посмотреть размеченный датасет без изображений</a>.</div>
+<table><thead><tr><th>ML-провайдер</th><th>Анализов</th></tr></thead><tbody>{provider_rows}</tbody></table>
 <h2>Продуктовые события</h2><table><thead><tr><th>Событие</th><th>Количество</th></tr></thead><tbody>{event_rows}</tbody></table>
 <h2>Последние события</h2><table><thead><tr><th>UTC</th><th>Событие</th><th>User</th><th>A/B</th></tr></thead><tbody>{recent_rows}</tbody></table>
 </main></body></html>"""
