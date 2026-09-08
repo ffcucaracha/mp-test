@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } fro
 
 import { api } from './api'
 import './feed.css'
+import { MonetizationExperiment } from './MonetizationExperiment'
 import { PlantHealthPanel } from './PlantHealthPanel'
 import type { AgroField, FeedPost, PlantHealthAnalysis, PostCreate, PostStatus, User } from './types'
 
@@ -199,6 +200,8 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
           {showComposer ? 'Закрыть' : '+ Публикация'}
         </button>
       </div>
+
+      <MonetizationExperiment currentUser={currentUser} />
 
       {fields.length === 0 && !loading && (
         <div className="feed-info-card">
