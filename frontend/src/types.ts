@@ -13,6 +13,13 @@ export type User = {
 
 export type UserUpdate = Omit<User, 'id' | 'username'>
 
+export type GamificationMetrics = {
+  profile_completeness: number
+  neighbors: number
+  weekly_activity_streak: number
+  reputation: number
+}
+
 export type PrivacyVariant = 'A' | 'B'
 export type VisitRequestStatus = 'pending' | 'approved' | 'declined'
 
