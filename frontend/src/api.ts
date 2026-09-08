@@ -25,6 +25,15 @@ import type {
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
+export type MonetizationEventName =
+  | 'premium_teaser_shown'
+  | 'premium_teaser_clicked'
+  | 'ad_impression'
+  | 'ad_closed'
+  | 'ad_free_offer_shown'
+  | 'ad_free_offer_accepted'
+  | 'ad_free_offer_declined'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -97,6 +106,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ user_id: userId }),
     }),
+
+  trackMonetization: (
+    userId: number,
+    eventName: MonetizationEventName,
+    properties: Record<string, string | number | boolean | null> = {},
+  ) => request<{ ok: boolean; event_name: MonetizationEventName }>('/api/experiments/monetization/events', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: userId, event_name: eventName, properties }),
+  }),
+  monetizationMetrics: () => request<{
+    counts: Record<MonetizationEventName, number>
+    teaser_ctr_percent: number
+    ad_close_rate_percent: number
+    offer_decision_rate_percent: number
+    ad_free_acceptance_percent: number
+  }>('/api/experiments/monetization/metrics'),
 
   neighbors: (userId: number) => request<NeighborLink[]>(`/api/neighbors?user_id=${userId}`),
   addNeighbor: (userId: number, neighborUserId: number) => request<NeighborLink>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'POST' }),
