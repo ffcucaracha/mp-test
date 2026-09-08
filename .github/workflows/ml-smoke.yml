@@ -1,0 +1,151 @@
+name: Plant health ML smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/ml-smoke.yml'
+
+jobs:
+  ml-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and start stack
+        run: WEATHER_PROVIDER=demo PLANT_HEALTH_PROVIDER=demo docker compose up -d --build
+
+      - name: Wait for API
+        run: |
+          for i in {1..40}; do
+            if curl --fail --silent http://localhost:8000/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs backend
+          exit 1
+
+      - name: Verify provider registry
+        run: |
+          curl --fail http://localhost:8000/api/ml/providers > /tmp/providers.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/providers.json') as f:
+              data = json.load(f)
+          assert data['default'] == 'demo'
+          names = {item['name'] for item in data['providers']}
+          assert {'kindwise', 'gemini', 'plantvillage', 'demo'} <= names
+          demo = next(item for item in data['providers'] if item['name'] == 'demo')
+          assert demo['configured'] is True
+          PY
+
+      - name: Analyze photo and save human label
+        run: |
+          PHOTO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg=='
+          curl --fail -X POST http://localhost:8000/api/ml/analyze \
+            -H 'Content-Type: application/json' \
+            -d "{\"user_id\":1,\"field_id\":1,\"provider\":\"demo\",\"image_data_url\":\"${PHOTO}\"}" > /tmp/analysis.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/analysis.json') as f:
+              data = json.load(f)
+          assert data['provider'] == 'demo'
+          assert data['feedback_status'] == 'pending'
+          assert data['suggestions'][0]['label'] == 'Фитофтороз'
+          assert data['top_confidence'] > 0.7
+          print(data['id'])
+          PY
+
+          ANALYSIS_ID=$(python3 - <<'PY'
+          import json
+          with open('/tmp/analysis.json') as f:
+              print(json.load(f)['id'])
+          PY
+          )
+          echo "$ANALYSIS_ID" > /tmp/analysis-id
+
+          curl --fail -X PUT "http://localhost:8000/api/ml/analyses/${ANALYSIS_ID}/feedback" \
+            -H 'Content-Type: application/json' \
+            -d '{"user_id":1,"verdict":"corrected","corrected_label":"Тестовая подтверждённая проблема"}' > /tmp/feedback.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/feedback.json') as f:
+              data = json.load(f)
+          assert data['feedback_status'] == 'corrected'
+          assert data['final_label'] == 'Тестовая подтверждённая проблема'
+          PY
+
+      - name: Link ML result to a problem post and create local warning
+        run: |
+          PHOTO='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL7WQAAAABJRU5ErkJggg=='
+          ANALYSIS_ID=$(cat /tmp/analysis-id)
+
+          curl --fail -X POST http://localhost:8000/api/posts \
+            -H 'Content-Type: application/json' \
+            -d "{\"author_id\":1,\"field_id\":1,\"text\":\"Проблема после AI-подсказки\",\"status\":\"problem\",\"photo_data_url\":\"${PHOTO}\",\"latitude\":54.9914,\"longitude\":73.3645}" > /tmp/ml-post.json
+          POST_ID=$(python3 - <<'PY'
+          import json
+          with open('/tmp/ml-post.json') as f:
+              data = json.load(f)
+          assert data['status'] == 'problem'
+          print(data['id'])
+          PY
+          )
+
+          curl --fail -X PUT "http://localhost:8000/api/ml/analyses/${ANALYSIS_ID}/post" \
+            -H 'Content-Type: application/json' \
+            -d "{\"user_id\":1,\"post_id\":${POST_ID}}" > /tmp/linked.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/linked.json') as f:
+              data = json.load(f)
+          assert data['posted_post_id'] is not None
+          PY
+
+          curl --fail -X POST "http://localhost:8000/api/ml/analyses/${ANALYSIS_ID}/notify-neighbors" \
+            -H 'Content-Type: application/json' \
+            -d '{"user_id":1}' > /tmp/ml-warning.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/ml-warning.json') as f:
+              data = json.load(f)
+          assert data['alert_id'] > 0
+          assert data['recipients'] >= 0
+          PY
+
+      - name: Verify own labeled dataset
+        run: |
+          curl --fail 'http://localhost:8000/api/ml/dataset?labeled_only=true' > /tmp/dataset.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/dataset.json') as f:
+              data = json.load(f)
+          assert data['summary']['analyses'] >= 1
+          assert data['summary']['labeled'] >= 1
+          assert data['summary']['corrected'] >= 1
+          assert data['summary']['providers'].get('demo', 0) >= 1
+          assert data['items']
+          assert data['items'][0]['final_label'] is not None
+          assert 'image_data_url' not in data['items'][0]
+          PY
+
+      - name: Verify backend-only ML metrics
+        run: |
+          curl --fail http://localhost:8000/internal/metrics > /tmp/metrics.html
+          grep -q 'ML и собственный датасет' /tmp/metrics.html
+          grep -q 'ml_dataset_labeled' /tmp/metrics.html
+          grep -q 'demo' /tmp/metrics.html
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
