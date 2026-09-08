@@ -2,7 +2,8 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useState } fro
 
 import { api } from './api'
 import './feed.css'
-import type { AgroField, FeedPost, PostCreate, PostStatus, User } from './types'
+import { PlantHealthPanel } from './PlantHealthPanel'
+import type { AgroField, FeedPost, PlantHealthAnalysis, PostCreate, PostStatus, User } from './types'
 
 const STATUS_OPTIONS: { value: PostStatus; label: string }[] = [
   { value: 'sowing', label: 'Посев' },
@@ -22,7 +23,10 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
   const [showComposer, setShowComposer] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [photoName, setPhotoName] = useState('')
+  const [mlAnalysis, setMlAnalysis] = useState<PlantHealthAnalysis | null>(null)
+  const [notifyNeighbors, setNotifyNeighbors] = useState(true)
   const [draft, setDraft] = useState<PostCreate>({
     author_id: currentUser.id,
     field_id: 0,
@@ -74,9 +78,18 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
     [draft.field_id, fields],
   )
 
+  const handleMlAnalysisChange = useCallback((analysis: PlantHealthAnalysis | null) => {
+    setMlAnalysis(analysis)
+  }, [])
+
+  const handleSuggestedText = useCallback((text: string) => {
+    setDraft((current) => ({ ...current, text: current.text.trim() ? `${current.text.trim()}\n\n${text}` : text }))
+  }, [])
+
   function selectField(fieldId: number) {
     const field = fields.find((item) => item.id === fieldId)
     if (!field) return
+    setMlAnalysis(null)
     setDraft((current) => ({
       ...current,
       field_id: field.id,
@@ -89,6 +102,8 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
     const file = event.target.files?.[0]
     if (!file) return
     setError('')
+    setNotice('')
+    setMlAnalysis(null)
     try {
       const dataUrl = await resizeImage(file)
       setDraft((current) => ({ ...current, photo_data_url: dataUrl }))
@@ -111,16 +126,34 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
 
     setSubmitting(true)
     setError('')
+    setNotice('')
     try {
-      await api.createPost({ ...draft, author_id: currentUser.id })
+      const post = await api.createPost({ ...draft, author_id: currentUser.id })
+      let mlMessage = ''
+      if (mlAnalysis && ['accepted', 'corrected'].includes(mlAnalysis.feedback_status)) {
+        try {
+          await api.linkPlantHealthPost(mlAnalysis.id, currentUser.id, post.id)
+          if (notifyNeighbors) {
+            const result = await api.notifyPlantHealthNeighbors(mlAnalysis.id, currentUser.id)
+            mlMessage = result.recipients > 0
+              ? `Проблема опубликована. Предупреждение получили соседние хозяйства: ${result.recipients}.`
+              : 'Проблема опубликована. Подходящих соседей в заданном радиусе пока нет.'
+          }
+        } catch (mlErr) {
+          mlMessage = `Публикация создана, но ML-сценарий завершился не полностью: ${mlErr instanceof Error ? mlErr.message : 'ошибка'}`
+        }
+      }
+
       setDraft((current) => ({
         ...current,
         text: '',
         status: 'problem',
         photo_data_url: '',
       }))
+      setMlAnalysis(null)
       setPhotoName('')
       setShowComposer(false)
+      setNotice(mlMessage)
       await reloadFeed()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось опубликовать запись')
@@ -178,7 +211,7 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
         <form className="publication-composer" onSubmit={submitPost}>
           <div className="composer-title-row">
             <div>
-              <span className="feed-kicker">Этап 5 · публикация с поля</span>
+              <span className="feed-kicker">Публикация с поля</span>
               <h2>Что происходит?</h2>
             </div>
             <span className="field-location-chip">⌖ {selectedField.name}</span>
@@ -195,7 +228,14 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
             </label>
             <label className="feed-field">
               <span>Статус</span>
-              <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as PostStatus })}>
+              <select
+                value={draft.status}
+                onChange={(e) => {
+                  const status = e.target.value as PostStatus
+                  if (status !== 'problem') setMlAnalysis(null)
+                  setDraft({ ...draft, status })
+                }}
+              >
                 {STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </label>
@@ -213,6 +253,29 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
             )}
           </label>
           {photoName && <small className="photo-name">{photoName}</small>}
+
+          {draft.status === 'problem' && draft.photo_data_url && (
+            <PlantHealthPanel
+              userId={currentUser.id}
+              fieldId={selectedField.id}
+              imageDataUrl={draft.photo_data_url}
+              onAnalysisChange={handleMlAnalysisChange}
+              onSuggestedText={handleSuggestedText}
+            />
+          )}
+
+          {mlAnalysis && ['accepted', 'corrected'].includes(mlAnalysis.feedback_status) && (
+            <label className="feed-field">
+              <span>
+                <input
+                  type="checkbox"
+                  checked={notifyNeighbors}
+                  onChange={(event) => setNotifyNeighbors(event.target.checked)}
+                />{' '}
+                После публикации предупредить моих соседей в радиусе
+              </span>
+            </label>
+          )}
 
           <label className="feed-field">
             <span>Комментарий (необязательно)</span>
@@ -236,6 +299,7 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
       )}
 
       {error && <div className="error-banner">{error}</div>}
+      {notice && <div className="feed-info-card"><p>{notice}</p></div>}
 
       {loading ? (
         <p>Загрузка ленты…</p>
@@ -306,20 +370,10 @@ function PostCard({
       {post.text && <p className="social-post-text">{post.text}</p>}
 
       <div className="reaction-row">
-        <button
-          type="button"
-          className={`reaction-button healthy ${post.viewer_reaction === 1 ? 'active' : ''}`}
-          onClick={() => onReact(1)}
-          aria-label="Здоровый колос"
-        >
+        <button type="button" className={`reaction-button healthy ${post.viewer_reaction === 1 ? 'active' : ''}`} onClick={() => onReact(1)} aria-label="Здоровый колос">
           <span>🌾</span><b>{post.healthy_count}</b><small>здорово</small>
         </button>
-        <button
-          type="button"
-          className={`reaction-button wilted ${post.viewer_reaction === -1 ? 'active' : ''}`}
-          onClick={() => onReact(-1)}
-          aria-label="Увядший колос"
-        >
+        <button type="button" className={`reaction-button wilted ${post.viewer_reaction === -1 ? 'active' : ''}`} onClick={() => onReact(-1)} aria-label="Увядший колос">
           <span>🥀</span><b>{post.wilted_count}</b><small>проблема</small>
         </button>
         <span className="comment-count">💬 {post.comments.length}</span>
@@ -338,12 +392,7 @@ function PostCard({
 
       <form className="comment-form" onSubmit={submitComment}>
         <Avatar name={currentUser.name} small />
-        <input
-          value={commentText}
-          onChange={(e) => setCommentText(e.target.value)}
-          placeholder="Ответить по делу…"
-          maxLength={1000}
-        />
+        <input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Ответить по делу…" maxLength={1000} />
         <button type="submit" disabled={!commentText.trim() || commenting}>{commenting ? '…' : '↗'}</button>
       </form>
     </article>
