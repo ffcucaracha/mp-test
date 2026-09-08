@@ -1,0 +1,96 @@
+:root {
+  color: #111813;
+}
+
+body,
+.app-shell {
+  color: #111813;
+}
+
+.muted,
+.username,
+.topbar small,
+.user-option small,
+.composer p,
+.post-meta span,
+.post-actions,
+.profile-info span,
+.form-card small,
+.field-card .muted {
+  color: #465148 !important;
+}
+
+.topbar {
+  background: #fff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 2px solid #aeb8b0;
+}
+
+.login-card,
+.user-option,
+.form-card,
+.field-card,
+.profile-summary-card,
+.weather-panel,
+.apiary-card,
+.neighbor-card,
+.alert-card {
+  border-color: #b5beb7 !important;
+}
+
+.secondary-button,
+.drafts-button,
+.weather-refresh {
+  min-height: 44px;
+  border-width: 2px !important;
+  border-color: #7a867d !important;
+  color: #111813;
+  background: #fff;
+}
+
+.primary-button {
+  min-height: 48px;
+  font-weight: 800;
+}
+
+input,
+select,
+textarea {
+  color: #111813;
+  background: #fff;
+  border-color: #8f9a91 !important;
+}
+
+.bottom-nav {
+  background: #fff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-top: 2px solid #9aa49c;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #155f33;
+  outline-offset: 2px;
+}
+
+@media (prefers-contrast: more) {
+  .topbar,
+  .bottom-nav,
+  .login-card,
+  .user-option,
+  .form-card,
+  .field-card,
+  .profile-summary-card,
+  .weather-panel,
+  .apiary-card,
+  .neighbor-card,
+  .alert-card {
+    border-width: 3px !important;
+    border-color: #5f6b62 !important;
+  }
+}
