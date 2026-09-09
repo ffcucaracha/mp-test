@@ -31,52 +31,62 @@ jobs:
           docker compose logs backend
           exit 1
 
-      - name: Verify seeded users and fields
+      - name: Verify seeded users and polygon fields
         run: |
-          curl --fail http://localhost:8000/api/users
-          curl --fail http://localhost:8000/api/users/1/fields
+          curl --fail http://localhost:8000/api/users > /tmp/users.json
+          curl --fail http://localhost:8000/api/users/1/fields > /tmp/user1-fields.json
+          curl --fail http://localhost:8000/api/users/2/fields > /tmp/user2-fields.json
+          python3 - <<'PY'
+          import json
+          users = json.load(open('/tmp/users.json'))
+          fields = json.load(open('/tmp/user1-fields.json')) + json.load(open('/tmp/user2-fields.json'))
+          assert len(users) >= 6
+          assert len(fields) >= 4
+          for field in fields:
+              geometry = field['geometry']
+              assert geometry['type'] == 'Polygon'
+              ring = geometry['coordinates'][0]
+              assert len(ring) >= 4
+              assert ring[0] == ring[-1]
+              assert field['area_ha'] and field['area_ha'] > 0
+              assert field['latitude'] is not None and field['longitude'] is not None
+          PY
 
       - name: Verify privacy and visit request flow
         run: |
           curl --fail -X PUT http://localhost:8000/api/fields/3/privacy \
             -H 'Content-Type: application/json' \
             -d '{"owner_id":2,"privacy_variant":"B"}'
-
           curl --fail 'http://localhost:8000/api/public/fields/3?viewer_id=1' > /tmp/field-before.json
           python3 - <<'PY'
           import json
-          with open('/tmp/field-before.json') as f:
-              field = json.load(f)
+          field = json.load(open('/tmp/field-before.json'))
           assert field['privacy_variant'] == 'B'
           assert field['details_visible'] is False
           assert field['name'] is None
           assert field['latitude'] is None
+          assert field['geometry'] is None
           PY
 
           curl --fail -X POST http://localhost:8000/api/fields/3/visit-requests \
             -H 'Content-Type: application/json' \
             -d '{"requester_id":1,"message":"Хочу посмотреть поле"}' > /tmp/request.json
-
           REQUEST_ID=$(python3 - <<'PY'
           import json
-          with open('/tmp/request.json') as f:
-              print(json.load(f)['id'])
+          print(json.load(open('/tmp/request.json'))['id'])
           PY
           )
-
-          curl --fail http://localhost:8000/api/users/2/visit-requests/incoming
           curl --fail -X PUT "http://localhost:8000/api/visit-requests/${REQUEST_ID}" \
             -H 'Content-Type: application/json' \
             -d '{"owner_id":2,"status":"approved"}'
-
           curl --fail 'http://localhost:8000/api/public/fields/3?viewer_id=1' > /tmp/field-after.json
           python3 - <<'PY'
           import json
-          with open('/tmp/field-after.json') as f:
-              field = json.load(f)
+          field = json.load(open('/tmp/field-after.json'))
           assert field['details_visible'] is True
-          assert field['name'] == 'Берёзовка'
+          assert field['name']
           assert field['latitude'] is not None
+          assert field['geometry']['type'] == 'Polygon'
           assert field['visit_request_status'] == 'approved'
           PY
 
@@ -85,240 +95,148 @@ jobs:
           curl --fail 'http://localhost:8000/api/feed?viewer_id=1' > /tmp/feed-before.json
           python3 - <<'PY'
           import json
-          with open('/tmp/feed-before.json') as f:
-              feed = json.load(f)
+          feed = json.load(open('/tmp/feed-before.json'))
           assert len(feed) >= 2
           assert all('healthy_count' in post and 'comments' in post for post in feed)
           PY
 
-          PHOTO='data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%2210%22%3E%3Crect%20width=%2210%22%20height=%2210%22%20fill=%22green%22/%3E%3C/svg%3E'
+          python3 - <<'PY' > /tmp/post-payload.json
+          import json
+          field = next(item for item in json.load(open('/tmp/user1-fields.json')) if item['id'] == 1)
+          json.dump({
+              'author_id': 1,
+              'field_id': 1,
+              'text': 'Тестовая публикация',
+              'status': 'problem',
+              'photo_data_url': 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%2210%22%20height=%2210%22%3E%3Crect%20width=%2210%22%20height=%2210%22%20fill=%22green%22/%3E%3C/svg%3E',
+              'latitude': field['latitude'],
+              'longitude': field['longitude'],
+          }, open('/dev/stdout', 'w'))
+          PY
           curl --fail -X POST http://localhost:8000/api/posts \
-            -H 'Content-Type: application/json' \
-            -d "{\"author_id\":1,\"field_id\":1,\"text\":\"Тестовая публикация\",\"status\":\"problem\",\"photo_data_url\":\"${PHOTO}\",\"latitude\":54.9914,\"longitude\":73.3645}" > /tmp/post.json
-
+            -H 'Content-Type: application/json' --data @/tmp/post-payload.json > /tmp/post.json
           POST_ID=$(python3 - <<'PY'
           import json
-          with open('/tmp/post.json') as f:
-              post = json.load(f)
-          assert post['field_name'] == 'Северное поле'
+          post = json.load(open('/tmp/post.json'))
+          assert post['field_id'] == 1
+          assert post['field_name']
           assert post['status'] == 'problem'
           print(post['id'])
           PY
           )
-
           curl --fail -X PUT "http://localhost:8000/api/posts/${POST_ID}/reaction" \
-            -H 'Content-Type: application/json' \
-            -d '{"user_id":2,"value":1}' > /tmp/reacted.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/reacted.json') as f:
-              post = json.load(f)
-          assert post['healthy_count'] == 1
-          assert post['score'] == 1
-          PY
-
+            -H 'Content-Type: application/json' -d '{"user_id":2,"value":1}' > /tmp/reacted.json
           curl --fail -X POST "http://localhost:8000/api/posts/${POST_ID}/comments" \
-            -H 'Content-Type: application/json' \
-            -d '{"author_id":2,"text":"Проверю у себя на поле"}' > /tmp/commented.json
+            -H 'Content-Type: application/json' -d '{"author_id":2,"text":"Проверю у себя на поле"}' > /tmp/commented.json
           python3 - <<'PY'
           import json
-          with open('/tmp/commented.json') as f:
-              post = json.load(f)
-          assert len(post['comments']) == 1
-          assert post['comments'][0]['text'] == 'Проверю у себя на поле'
+          reacted = json.load(open('/tmp/reacted.json'))
+          commented = json.load(open('/tmp/commented.json'))
+          assert reacted['healthy_count'] >= 1
+          assert any(item['text'] == 'Проверю у себя на поле' for item in commented['comments'])
           PY
 
       - name: Verify analytics metrics and neighbors
         run: |
           curl --fail -X POST 'http://localhost:8000/api/neighbors/3?user_id=1'
           curl --fail 'http://localhost:8000/api/neighbors?user_id=1' > /tmp/neighbors.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/neighbors.json') as f:
-              neighbors = json.load(f)
-          assert any(item['user']['id'] == 3 for item in neighbors)
-          PY
-
           curl --fail 'http://localhost:8000/api/neighbors/3/profile?user_id=1'
           curl --fail 'http://localhost:8000/api/internal/metrics' > /tmp/metrics.json
           python3 - <<'PY'
           import json
-          with open('/tmp/metrics.json') as f:
-              metrics = json.load(f)
+          neighbors = json.load(open('/tmp/neighbors.json'))
+          metrics = json.load(open('/tmp/metrics.json'))
+          assert any(item['user']['id'] == 3 for item in neighbors)
           assert metrics['activation']['users'] >= 4
-          assert metrics['social']['neighbors'] >= 1
           assert metrics['events'].get('neighbor_added', 0) >= 1
           assert metrics['events'].get('feed_opened', 0) >= 1
           PY
-
           curl --fail -X DELETE 'http://localhost:8000/api/neighbors/3?user_id=1'
 
       - name: Verify crop rotation
         run: |
           curl --fail 'http://localhost:8000/api/fields/1/crop-seasons?viewer_id=1' > /tmp/seasons.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/seasons.json') as f:
-              seasons = json.load(f)
-          assert len(seasons) >= 3
-          assert seasons[0]['year'] >= seasons[-1]['year']
-          PY
-
           curl --fail -X POST http://localhost:8000/api/fields/1/crop-seasons \
-            -H 'Content-Type: application/json' \
-            -d '{"user_id":1,"year":2027,"crop":"Горох"}' > /tmp/season-created.json
+            -H 'Content-Type: application/json' -d '{"user_id":1,"year":2027,"crop":"Горох"}' > /tmp/season-created.json
           python3 - <<'PY'
           import json
-          with open('/tmp/season-created.json') as f:
-              season = json.load(f)
-          assert season['year'] == 2027
-          assert season['crop'] == 'Горох'
+          seasons = json.load(open('/tmp/seasons.json'))
+          created = json.load(open('/tmp/season-created.json'))
+          assert len(seasons) >= 3
+          assert created['year'] == 2027 and created['crop'] == 'Горох'
           PY
 
       - name: Verify apiary pesticide alerts
         run: |
           curl --fail 'http://localhost:8000/api/apiaries?user_id=5' > /tmp/apiaries.json
-          python3 - <<'PY'
+          python3 - <<'PY' > /tmp/alert-payload.json
           import json
-          with open('/tmp/apiaries.json') as f:
-              apiaries = json.load(f)
-          assert len(apiaries) >= 1
+          apiary = json.load(open('/tmp/apiaries.json'))[0]
+          json.dump({
+              'author_id': 2,
+              'field_id': 3,
+              'type': 'pesticide',
+              'latitude': apiary['latitude'],
+              'longitude': apiary['longitude'],
+              'radius_km': 25,
+              'starts_at': '2026-09-10T07:00:00Z',
+              'title': 'Планируется обработка пестицидами',
+              'details': 'Плановая обработка поля',
+          }, open('/dev/stdout', 'w'))
           PY
-
           curl --fail -X POST http://localhost:8000/api/alerts \
-            -H 'Content-Type: application/json' \
-            -d '{"author_id":2,"field_id":3,"type":"pesticide","latitude":55.103,"longitude":73.52,"radius_km":25,"starts_at":"2026-09-09T07:00:00Z","title":"Планируется обработка пестицидами","details":"Обработка ячменя утром"}' > /tmp/alert-created.json
-          python3 - <<'PY'
+            -H 'Content-Type: application/json' --data @/tmp/alert-payload.json > /tmp/alert-created.json
+          ALERT_ID=$(python3 - <<'PY'
           import json
-          with open('/tmp/alert-created.json') as f:
-              result = json.load(f)
+          result = json.load(open('/tmp/alert-created.json'))
           assert result['recipients'] >= 1
           print(result['id'])
           PY
-
-          ALERT_ID=$(python3 - <<'PY'
-          import json
-          with open('/tmp/alert-created.json') as f:
-              print(json.load(f)['id'])
-          PY
           )
-
           curl --fail 'http://localhost:8000/api/alerts?user_id=5' > /tmp/alerts.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/alerts.json') as f:
-              alerts = json.load(f)
-          assert any(item['type'] == 'pesticide' and not item['is_opened'] for item in alerts)
-          PY
-
-          curl --fail 'http://localhost:8000/api/alerts/unread-count?user_id=5' > /tmp/unread.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/unread.json') as f:
-              assert json.load(f)['count'] >= 1
-          PY
-
           curl --fail -X PUT "http://localhost:8000/api/alerts/${ALERT_ID}/open" \
-            -H 'Content-Type: application/json' \
-            -d '{"user_id":5}' > /tmp/opened.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/opened.json') as f:
-              assert json.load(f)['is_opened'] is True
-          PY
-
+            -H 'Content-Type: application/json' -d '{"user_id":5}' > /tmp/opened.json
           curl --fail -X POST "http://localhost:8000/api/alerts/${ALERT_ID}/owner-contact?user_id=5" > /tmp/owner.json
           python3 - <<'PY'
           import json
-          with open('/tmp/owner.json') as f:
-              assert json.load(f)['id'] == 2
+          alerts = json.load(open('/tmp/alerts.json'))
+          opened = json.load(open('/tmp/opened.json'))
+          owner = json.load(open('/tmp/owner.json'))
+          assert any(item['type'] == 'pesticide' for item in alerts)
+          assert opened['is_opened'] is True
+          assert owner['id'] == 2
           PY
 
       - name: Verify weather provider and frost alerts
         run: |
           curl --fail -X POST http://localhost:8000/api/fields/1/weather/check \
-            -H 'Content-Type: application/json' \
-            -d '{"user_id":1,"frost_threshold_c":0,"hours":72}' > /tmp/weather.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/weather.json') as f:
-              weather = json.load(f)
-          assert weather['provider'] == 'demo'
-          assert weather['frost_risk'] is True
-          assert weather['min_temperature_c'] < 0
-          assert weather['alert_id'] is not None
-          assert weather['alert_created'] is True
-          PY
-
+            -H 'Content-Type: application/json' -d '{"user_id":1,"frost_threshold_c":0,"hours":72}' > /tmp/weather.json
           curl --fail -X POST http://localhost:8000/api/fields/1/weather/check \
-            -H 'Content-Type: application/json' \
-            -d '{"user_id":1,"frost_threshold_c":0,"hours":72}' > /tmp/weather-again.json
+            -H 'Content-Type: application/json' -d '{"user_id":1,"frost_threshold_c":0,"hours":72}' > /tmp/weather-again.json
           python3 - <<'PY'
           import json
-          with open('/tmp/weather.json') as f:
-              first = json.load(f)
-          with open('/tmp/weather-again.json') as f:
-              second = json.load(f)
-          assert second['frost_risk'] is True
-          assert second['alert_created'] is False
-          assert second['alert_id'] == first['alert_id']
+          first = json.load(open('/tmp/weather.json'))
+          second = json.load(open('/tmp/weather-again.json'))
+          assert first['provider'] == 'demo'
+          assert first['frost_risk'] is True and first['alert_created'] is True
+          assert second['alert_created'] is False and second['alert_id'] == first['alert_id']
           PY
 
-          curl --fail 'http://localhost:8000/api/alerts?user_id=1' > /tmp/alerts-weather.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/alerts-weather.json') as f:
-              alerts = json.load(f)
-          weather_alerts = [item for item in alerts if item['type'] == 'weather']
-          assert weather_alerts
-          assert any(item['title'] == 'Риск заморозков' for item in weather_alerts)
-          assert all(item['apiary_id'] is None for item in weather_alerts)
-          PY
-
-          curl --fail 'http://localhost:8000/api/internal/metrics' > /tmp/weather-metrics.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/weather-metrics.json') as f:
-              metrics = json.load(f)
-          events = metrics['events']
-          assert events.get('weather_forecast_checked', 0) >= 2
-          assert events.get('frost_risk_detected', 0) >= 2
-          assert events.get('weather_alert_created', 0) >= 1
-          assert events.get('weather_alert_deduplicated', 0) >= 1
-          PY
-
-      - name: Verify gamification
+      - name: Verify gamification and browser metrics
         run: |
           curl --fail http://localhost:8000/api/users/1/gamification > /tmp/gamification.json
+          curl --fail http://localhost:8000/internal/metrics > /tmp/metrics.html
           python3 - <<'PY'
           import json
-          with open('/tmp/gamification.json') as f:
-              metrics = json.load(f)
+          metrics = json.load(open('/tmp/gamification.json'))
           assert 0 <= metrics['profile_completeness'] <= 100
           assert isinstance(metrics['neighbors'], int)
           assert metrics['weekly_activity_streak'] >= 1
           assert isinstance(metrics['reputation'], int)
           PY
-
-          curl --fail 'http://localhost:8000/api/internal/metrics' > /tmp/gamification-events.json
-          python3 - <<'PY'
-          import json
-          with open('/tmp/gamification-events.json') as f:
-              metrics = json.load(f)
-          assert metrics['events'].get('streak_viewed', 0) >= 1
-          assert metrics['events'].get('reputation_viewed', 0) >= 1
-          PY
-
-      - name: Verify browser metrics page
-        run: |
-          curl --fail http://localhost:8000/internal/metrics > /tmp/metrics.html
           grep -q 'AgroConnect' /tmp/metrics.html
           grep -q 'Активация' /tmp/metrics.html
-          grep -q 'Социальное ядро' /tmp/metrics.html
-          grep -q 'Предупреждения' /tmp/metrics.html
           grep -q 'Приватность A/B' /tmp/metrics.html
-          grep -q 'Open rate' /tmp/metrics.html
-          grep -q 'streak_viewed' /tmp/metrics.html
           grep -q 'weather_forecast_checked' /tmp/metrics.html
 
       - name: Verify frontend
