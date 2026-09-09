@@ -17,7 +17,7 @@ export function closePolygon(points: LonLat[]): GeoJsonPolygon | null {
 
 export function polygonOpenRing(geometry: GeoJsonPolygon | null | undefined): LonLat[] {
   const ring = geometry?.coordinates?.[0]
-  if (!ring || ring.length < 4) return []
+  if (!ring || ring.length < 2) return []
   const open = ring.slice(0, -1)
   return open.map((point) => [Number(point[0]), Number(point[1])])
 }
@@ -70,30 +70,15 @@ export function mapOriginWorldPixel(latitude: number, longitude: number, zoom: n
   return [(centerTileX - radius) * TILE_SIZE, (centerTileY - radius) * TILE_SIZE]
 }
 
-export function polygonSvgPoints(
-  geometry: GeoJsonPolygon,
-  centerLatitude: number,
-  centerLongitude: number,
-  zoom: number,
-  radius = 1,
-): string {
+export function polygonSvgPoints(geometry: GeoJsonPolygon, centerLatitude: number, centerLongitude: number, zoom: number, radius = 1): string {
   const [originX, originY] = mapOriginWorldPixel(centerLatitude, centerLongitude, zoom, radius)
-  return polygonOpenRing(geometry)
-    .map(([longitude, latitude]) => {
-      const [worldX, worldY] = lonLatToWorldPixel(longitude, latitude, zoom)
-      return `${worldX - originX},${worldY - originY}`
-    })
-    .join(' ')
+  return polygonOpenRing(geometry).map(([longitude, latitude]) => {
+    const [worldX, worldY] = lonLatToWorldPixel(longitude, latitude, zoom)
+    return `${worldX - originX},${worldY - originY}`
+  }).join(' ')
 }
 
-export function mapPixelToLonLat(
-  x: number,
-  y: number,
-  centerLatitude: number,
-  centerLongitude: number,
-  zoom: number,
-  radius = 1,
-): LonLat {
+export function mapPixelToLonLat(x: number, y: number, centerLatitude: number, centerLongitude: number, zoom: number, radius = 1): LonLat {
   const [originX, originY] = mapOriginWorldPixel(centerLatitude, centerLongitude, zoom, radius)
   return worldPixelToLonLat(originX + x, originY + y, zoom)
 }
