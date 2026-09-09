@@ -41,8 +41,8 @@ export function OfflineMap({ latitude, longitude, compact = false, zoom: zoomOve
   const radius = 1
   const gridSize = (radius * 2 + 1) * 256
   const tiles = useMemo(() => fieldTileUrls(latitude, longitude, zoom, radius).map((url) => ({ key: url, url })), [latitude, longitude, zoom])
-  const allPolygons = useMemo(() => {
-    const items = polygon ? [{ geometry: polygon }] : []
+  const allPolygons = useMemo<MapPolygon[]>(() => {
+    const items: MapPolygon[] = polygon ? [{ geometry: polygon }] : []
     return [...items, ...polygons]
   }, [polygon, polygons])
 
