@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field as PydanticField
+from pydantic import BaseModel, ConfigDict, Field as PydanticField, model_validator
+
+from .field_geometry import normalize_field_geometry
 
 PostStatus = Literal["sowing", "sprouts", "flowering", "problem", "harvest", "treatment"]
 AlertType = Literal["disease", "pesticide", "weather"]
@@ -40,7 +42,22 @@ class FieldCreate(BaseModel):
     latitude: float = PydanticField(ge=-90, le=90)
     longitude: float = PydanticField(ge=-180, le=180)
     area_ha: float | None = PydanticField(default=None, gt=0)
+    geometry: dict | None = None
     privacy_variant: Literal["A", "B"] = "A"
+
+    @model_validator(mode="after")
+    def normalize_geometry(self):
+        geometry, latitude, longitude, area_ha = normalize_field_geometry(
+            self.geometry,
+            self.latitude,
+            self.longitude,
+            self.area_ha,
+        )
+        self.geometry = geometry
+        self.latitude = latitude
+        self.longitude = longitude
+        self.area_ha = area_ha
+        return self
 
 
 class FieldOut(FieldCreate):
@@ -70,6 +87,7 @@ class PublicFieldOut(BaseModel):
     area_ha: float | None
     latitude: float | None
     longitude: float | None
+    geometry: dict | None = None
     approximate_latitude: float
     approximate_longitude: float
     visit_request_status: Literal["pending", "approved", "declined"] | None = None
