@@ -43,6 +43,7 @@ class Field(Base):
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
     area_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geometry: Mapped[dict] = mapped_column(JSON, nullable=False)
     privacy_variant: Mapped[str] = mapped_column(String(1), default="A")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
