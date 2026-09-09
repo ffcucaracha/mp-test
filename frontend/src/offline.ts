@@ -1,5 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 
+import type { GeoJsonPolygon } from './types'
+
 const DB_NAME = 'agroconnect-offline'
 const DB_VERSION = 2
 const CACHE_STORE = 'cache'
@@ -48,6 +50,7 @@ export type LocalFieldDraft = {
     latitude: number
     longitude: number
     area_ha: number | null
+    geometry: GeoJsonPolygon
     rotation?: string
     privacy_variant?: 'A' | 'B'
   }
@@ -116,50 +119,18 @@ export async function getCacheEntry<T>(key: string): Promise<CacheEntry<T> | nul
   return result ?? null
 }
 
-export async function enqueueMutation(
-  path: string,
-  method: string,
-  body: unknown,
-  label: string,
-  options: EnqueueOptions = {},
-): Promise<number> {
-  const existing = options.dedupeKey
-    ? (await getOutbox()).find((item) => item.dedupe_key === options.dedupeKey)
-    : undefined
-
+export async function enqueueMutation(path: string, method: string, body: unknown, label: string, options: EnqueueOptions = {}): Promise<number> {
+  const existing = options.dedupeKey ? (await getOutbox()).find((item) => item.dedupe_key === options.dedupeKey) : undefined
   if (existing?.id) {
-    const updated: OutboxItem = {
-      ...existing,
-      body,
-      label,
-      kind: options.kind ?? existing.kind,
-      priority: options.priority ?? existing.priority,
-      local_ref: options.localRef ?? existing.local_ref,
-      attempts: 0,
-      last_error: undefined,
-    }
+    const updated: OutboxItem = { ...existing, body, label, kind: options.kind ?? existing.kind, priority: options.priority ?? existing.priority, local_ref: options.localRef ?? existing.local_ref, attempts: 0, last_error: undefined }
     await putOutboxItem(updated)
     await mirrorNative(updated)
     window.dispatchEvent(new Event('agroconnect:outbox-changed'))
     return existing.id
   }
-
-  const item: OutboxItem = {
-    client_id: randomId(),
-    path,
-    method,
-    body,
-    label,
-    kind: options.kind ?? 'generic',
-    priority: options.priority ?? 0,
-    dedupe_key: options.dedupeKey,
-    local_ref: options.localRef,
-    created_at: Date.now(),
-    attempts: 0,
-  }
+  const item: OutboxItem = { client_id: randomId(), path, method, body, label, kind: options.kind ?? 'generic', priority: options.priority ?? 0, dedupe_key: options.dedupeKey, local_ref: options.localRef, created_at: Date.now(), attempts: 0 }
   const id = Number(await tx(OUTBOX_STORE, 'readwrite', (store) => store.add(item) as IDBRequest<IDBValidKey>))
-  const stored = { ...item, id }
-  await mirrorNative(stored)
+  await mirrorNative({ ...item, id })
   window.dispatchEvent(new Event('agroconnect:outbox-changed'))
   return id
 }
@@ -169,9 +140,7 @@ export async function getOutbox(): Promise<OutboxItem[]> {
   return items.sort((a, b) => (b.priority - a.priority) || (a.created_at - b.created_at))
 }
 
-export async function getOutboxCount(): Promise<number> {
-  return tx<number>(OUTBOX_STORE, 'readonly', (store) => store.count())
-}
+export async function getOutboxCount(): Promise<number> { return tx<number>(OUTBOX_STORE, 'readonly', (store) => store.count()) }
 
 export async function removeOutboxItem(id: number): Promise<void> {
   const item = (await getOutbox()).find((row) => row.id === id)
@@ -188,7 +157,6 @@ export async function updateOutboxBody(id: number, body: unknown, label?: string
   if (!item) throw new Error('Черновик не найден')
   const updated: OutboxItem = { ...item, body, label: label ?? item.label, attempts: 0, last_error: undefined }
   await putOutboxItem(updated)
-
   if (item.kind === 'field_create' && item.local_ref && body && typeof body === 'object' && !Array.isArray(body)) {
     const draft = await getLocalFieldDraft(item.local_ref)
     if (draft) {
@@ -200,53 +168,35 @@ export async function updateOutboxBody(id: number, body: unknown, label?: string
         latitude: typeof source.latitude === 'number' ? source.latitude : draft.payload.latitude,
         longitude: typeof source.longitude === 'number' ? source.longitude : draft.payload.longitude,
         area_ha: source.area_ha === null || typeof source.area_ha === 'number' ? source.area_ha : draft.payload.area_ha,
+        geometry: source.geometry && typeof source.geometry === 'object' ? source.geometry as GeoJsonPolygon : draft.payload.geometry,
       }
       await putLocalFieldDraft({ ...draft, payload })
     }
   }
-
   await mirrorNative(updated)
   window.dispatchEvent(new Event('agroconnect:outbox-changed'))
 }
 
-async function putOutboxItem(item: OutboxItem): Promise<void> {
-  await tx(OUTBOX_STORE, 'readwrite', (store) => store.put(item) as IDBRequest<IDBValidKey>)
-}
-
-async function deleteOutboxItem(id: number): Promise<void> {
-  await tx(OUTBOX_STORE, 'readwrite', (store) => store.delete(id) as IDBRequest<undefined>)
-}
+async function putOutboxItem(item: OutboxItem): Promise<void> { await tx(OUTBOX_STORE, 'readwrite', (store) => store.put(item) as IDBRequest<IDBValidKey>) }
+async function deleteOutboxItem(id: number): Promise<void> { await tx(OUTBOX_STORE, 'readwrite', (store) => store.delete(id) as IDBRequest<undefined>) }
 
 export async function addLocalFieldDraft(userId: number, payload: LocalFieldDraft['payload']): Promise<LocalFieldDraft> {
   const localRef = randomId()
-  const draft: LocalFieldDraft = {
-    local_ref: localRef,
-    temp_id: -Date.now(),
-    user_id: userId,
-    payload,
-    created_at: Date.now(),
-  }
+  const draft: LocalFieldDraft = { local_ref: localRef, temp_id: -Date.now(), user_id: userId, payload, created_at: Date.now() }
   await putLocalFieldDraft(draft)
   return draft
 }
 
-async function putLocalFieldDraft(draft: LocalFieldDraft): Promise<void> {
-  await tx(LOCAL_FIELDS_STORE, 'readwrite', (store) => store.put(draft) as IDBRequest<IDBValidKey>)
-}
-
+async function putLocalFieldDraft(draft: LocalFieldDraft): Promise<void> { await tx(LOCAL_FIELDS_STORE, 'readwrite', (store) => store.put(draft) as IDBRequest<IDBValidKey>) }
 async function getLocalFieldDraft(localRef: string): Promise<LocalFieldDraft | null> {
   const row = await tx<LocalFieldDraft | undefined>(LOCAL_FIELDS_STORE, 'readonly', (store) => store.get(localRef))
   return row ?? null
 }
-
 export async function getLocalFieldDrafts(userId: number): Promise<LocalFieldDraft[]> {
   const rows = await tx<LocalFieldDraft[]>(LOCAL_FIELDS_STORE, 'readonly', (store) => store.getAll())
   return rows.filter((row) => row.user_id === userId).sort((a, b) => a.created_at - b.created_at)
 }
-
-export async function removeLocalFieldDraft(localRef: string): Promise<void> {
-  await tx(LOCAL_FIELDS_STORE, 'readwrite', (store) => store.delete(localRef) as IDBRequest<undefined>)
-}
+export async function removeLocalFieldDraft(localRef: string): Promise<void> { await tx(LOCAL_FIELDS_STORE, 'readwrite', (store) => store.delete(localRef) as IDBRequest<undefined>) }
 
 async function reconcileNativeCompletions() {
   if (!Capacitor.isNativePlatform()) return 0
@@ -267,32 +217,23 @@ async function reconcileNativeCompletions() {
 
 export async function syncOutbox(): Promise<{ synced: number; pending: number }> {
   const reconciled = await reconcileNativeCompletions()
-
   if (Capacitor.isNativePlatform()) {
-    // Android WorkManager owns transmission so foreground JS and background native code never race the same POST.
     const items = await getOutbox()
     for (const item of items) await mirrorNative(item)
     const pending = await getOutboxCount()
     if (reconciled > 0) window.dispatchEvent(new Event('agroconnect:sync-complete'))
     return { synced: reconciled, pending }
   }
-
   if (!navigator.onLine) return { synced: reconciled, pending: await getOutboxCount() }
-
   const items = await getOutbox()
   let synced = reconciled
   for (const item of items) {
     if (!item.id) continue
     try {
-      const response = await fetch(`${API_URL}${item.path}`, {
-        method: item.method,
-        headers: { 'Content-Type': 'application/json', 'X-AgroConnect-Operation': item.client_id },
-        body: item.body === undefined ? undefined : JSON.stringify(item.body),
-      })
+      const response = await fetch(`${API_URL}${item.path}`, { method: item.method, headers: { 'Content-Type': 'application/json', 'X-AgroConnect-Operation': item.client_id }, body: item.body === undefined ? undefined : JSON.stringify(item.body) })
       if (!response.ok) {
         const retryable = response.status >= 500 || response.status === 408 || response.status === 429
-        const updated = { ...item, attempts: item.attempts + 1, last_error: `${response.status} ${response.statusText}` }
-        await putOutboxItem(updated)
+        await putOutboxItem({ ...item, attempts: item.attempts + 1, last_error: `${response.status} ${response.statusText}` })
         if (retryable) break
         continue
       }
@@ -300,16 +241,10 @@ export async function syncOutbox(): Promise<{ synced: number; pending: number }>
       if (item.kind === 'field_create' && item.local_ref) await removeLocalFieldDraft(item.local_ref)
       synced += 1
     } catch (error) {
-      const updated = {
-        ...item,
-        attempts: item.attempts + 1,
-        last_error: error instanceof Error ? error.message : 'Ошибка сети',
-      }
-      await putOutboxItem(updated)
+      await putOutboxItem({ ...item, attempts: item.attempts + 1, last_error: error instanceof Error ? error.message : 'Ошибка сети' })
       break
     }
   }
-
   const pending = await getOutboxCount()
   window.dispatchEvent(new Event('agroconnect:outbox-changed'))
   if (synced > 0) window.dispatchEvent(new Event('agroconnect:sync-complete'))
