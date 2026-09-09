@@ -1,7 +1,9 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 
 import { api } from './api'
 import { CropRotation } from './CropRotation'
+import { FieldPolygonEditor } from './FieldPolygonEditor'
+import { polygonAreaHa, polygonCentroid, polygonOpenRing } from './fieldGeometry'
 import {
   addLocalFieldDraft,
   enqueueMutation,
@@ -11,21 +13,46 @@ import {
 } from './offline'
 import { OfflineMap } from './OfflineMap'
 import { Stage4Panel } from './Stage4Panel'
-import type { AgroField, FieldCreate, User } from './types'
+import type { AgroField, FieldCreate, GeoJsonPolygon, User } from './types'
 import { WeatherPanel } from './WeatherPanel'
+
+const DEFAULT_CENTER = { latitude: 54.9924, longitude: 73.3686 }
 
 function isNetworkError(error: unknown) {
   if (!navigator.onLine) return true
   return error instanceof Error && (error.message.includes('Нет связи') || error.message.includes('не ответил вовремя'))
 }
 
+function emptyField(center = DEFAULT_CENTER): FieldCreate {
+  return {
+    name: '',
+    crop: '',
+    area_ha: null,
+    latitude: center.latitude,
+    longitude: center.longitude,
+    geometry: null,
+  }
+}
+
 export function FieldsPage({ user }: { user: User }) {
   const [fields, setFields] = useState<AgroField[]>([])
   const [pendingFields, setPendingFields] = useState<LocalFieldDraft[]>([])
-  const [form, setForm] = useState<FieldCreate>({ name: '', crop: '', area_ha: 0, latitude: 54.9924, longitude: 73.3686 })
+  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER)
+  const [form, setForm] = useState<FieldCreate>(() => emptyField())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+
+  const polygonPoints = polygonOpenRing(form.geometry)
+  const canSave = polygonPoints.length >= 3 && Boolean(form.name.trim()) && Boolean(form.crop.trim())
+
+  const farmMapCenter = useMemo(() => {
+    if (!fields.length) return mapCenter
+    return {
+      latitude: fields.reduce((sum, field) => sum + field.latitude, 0) / fields.length,
+      longitude: fields.reduce((sum, field) => sum + field.longitude, 0) / fields.length,
+    }
+  }, [fields, mapCenter])
 
   async function reload() {
     setLoading(true)
@@ -33,6 +60,9 @@ export function FieldsPage({ user }: { user: User }) {
       const [serverFields, localFields] = await Promise.all([api.fields(user.id), getLocalFieldDrafts(user.id)])
       setFields(serverFields)
       setPendingFields(localFields)
+      if (serverFields.length > 0) {
+        setMapCenter({ latitude: serverFields[0].latitude, longitude: serverFields[0].longitude })
+      }
     } catch (error) {
       try { setPendingFields(await getLocalFieldDrafts(user.id)) } catch { /* keep current drafts */ }
       setMessage(error instanceof Error ? error.message : 'Не удалось загрузить поля')
@@ -49,16 +79,39 @@ export function FieldsPage({ user }: { user: User }) {
   }, [user.id])
 
   function resetForm() {
-    setForm((current) => ({ ...current, name: '', crop: '', area_ha: 0 }))
+    setForm(emptyField(mapCenter))
+  }
+
+  function changeGeometry(geometry: GeoJsonPolygon | null) {
+    if (!geometry) {
+      setForm((current) => ({ ...current, geometry: null, area_ha: null }))
+      return
+    }
+    const points = polygonOpenRing(geometry)
+    if (points.length < 3) {
+      setForm((current) => ({ ...current, geometry, area_ha: null }))
+      return
+    }
+    const centroid = polygonCentroid(geometry)
+    const area = polygonAreaHa(geometry)
+    setForm((current) => ({
+      ...current,
+      geometry,
+      latitude: centroid.latitude,
+      longitude: centroid.longitude,
+      area_ha: area,
+    }))
   }
 
   async function saveOfflineField() {
+    if (!form.geometry || polygonOpenRing(form.geometry).length < 3) throw new Error('Нарисуйте границу поля минимум по трём точкам')
     const local = await addLocalFieldDraft(user.id, {
       name: form.name,
       crop: form.crop,
       latitude: form.latitude,
       longitude: form.longitude,
       area_ha: form.area_ha ?? null,
+      geometry: form.geometry,
     })
     try {
       await enqueueMutation(
@@ -74,11 +127,15 @@ export function FieldsPage({ user }: { user: User }) {
     }
     setPendingFields(await getLocalFieldDrafts(user.id))
     resetForm()
-    setMessage(`Поле «${local.payload.name}» сохранено локально. Временный ID ${local.temp_id}; после синхронизации оно получит серверный ID.`)
+    setMessage(`Поле «${local.payload.name}» сохранено локально. После синхронизации оно получит серверный ID.`)
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (!form.geometry || polygonOpenRing(form.geometry).length < 3) {
+      setMessage('Нарисуйте границу поля минимум по трём точкам')
+      return
+    }
     setSaving(true)
     setMessage('')
     try {
@@ -107,8 +164,10 @@ export function FieldsPage({ user }: { user: User }) {
     setMessage('Определяем координаты…')
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setForm((current) => ({ ...current, latitude: position.coords.latitude, longitude: position.coords.longitude }))
-        setMessage('Координаты определены')
+        const center = { latitude: position.coords.latitude, longitude: position.coords.longitude }
+        setMapCenter(center)
+        setForm((current) => current.geometry ? current : { ...current, latitude: center.latitude, longitude: center.longitude })
+        setMessage('Карта перемещена к вашей геопозиции')
       },
       () => setMessage('Не удалось определить геопозицию'),
       { enableHighAccuracy: true, timeout: 10000 },
@@ -121,7 +180,21 @@ export function FieldsPage({ user }: { user: User }) {
 
   return (
     <section className="fields-stage">
-      <div className="section-heading"><div><span className="eyebrow">Рабочий дневник</span><h1>Мои поля</h1><p>Координаты, культура, севооборот и погода доступны с последнего успешного обновления.</p></div></div>
+      <div className="section-heading"><div><span className="eyebrow">Рабочий дневник</span><h1>Мои поля</h1><p>Границы полей хранятся как полигоны; по ним автоматически считаются центр и площадь.</p></div></div>
+
+      {fields.length > 0 && (
+        <section className="form-card farm-fields-map-card">
+          <div className="field-card-heading">
+            <div><h2>Карта моих полей</h2><p>{fields.length} полей · контуры хозяйства</p></div>
+          </div>
+          <OfflineMap
+            latitude={farmMapCenter.latitude}
+            longitude={farmMapCenter.longitude}
+            zoom={11}
+            polygons={fields.map((field) => ({ geometry: field.geometry, label: field.name }))}
+          />
+        </section>
+      )}
 
       <form className="form-card field-form" onSubmit={submit}>
         <h2>Добавить поле</h2>
@@ -129,14 +202,20 @@ export function FieldsPage({ user }: { user: User }) {
           <FormField label="Название"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField>
           <FormField label="Культура"><input required value={form.crop} onChange={(e) => setForm({ ...form, crop: e.target.value })} /></FormField>
         </div>
-        <FormField label="Площадь, га"><input type="number" min="0" step="0.1" value={form.area_ha ?? ''} onChange={(e) => setForm({ ...form, area_ha: e.target.value === '' ? null : Number(e.target.value) })} /></FormField>
-        <div className="coordinate-row">
-          <FormField label="Широта"><input type="number" step="0.000001" value={form.latitude} onChange={(e) => setForm({ ...form, latitude: Number(e.target.value) })} /></FormField>
-          <FormField label="Долгота"><input type="number" step="0.000001" value={form.longitude} onChange={(e) => setForm({ ...form, longitude: Number(e.target.value) })} /></FormField>
+        <button type="button" className="secondary-button" onClick={useGeolocation}>⌖ Переместить карту к моей геопозиции</button>
+        <FieldPolygonEditor
+          centerLatitude={mapCenter.latitude}
+          centerLongitude={mapCenter.longitude}
+          geometry={form.geometry}
+          onChange={changeGeometry}
+        />
+        <div className="field-geometry-summary">
+          <span><strong>{polygonPoints.length}</strong> вершин</span>
+          <span><strong>{form.area_ha ?? '—'}</strong> га</span>
+          {polygonPoints.length >= 3 && <span>центр {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}</span>}
         </div>
-        <button type="button" className="secondary-button" onClick={useGeolocation}>⌖ Моя геопозиция</button>
-        <OfflineMap latitude={form.latitude} longitude={form.longitude} />
-        <button className="primary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем…' : navigator.onLine ? 'Добавить поле' : 'Сохранить поле офлайн'}</button>
+        <p className="muted">Площадь рассчитывается автоматически по нарисованному контуру. Отдельно вводить координаты и гектары не нужно.</p>
+        <button className="primary-button" type="submit" disabled={saving || !canSave}>{saving ? 'Сохраняем…' : navigator.onLine ? 'Добавить поле' : 'Сохранить поле офлайн'}</button>
         {message && <p className="form-message">{message}</p>}
       </form>
 
@@ -148,9 +227,8 @@ export function FieldsPage({ user }: { user: User }) {
                 <div><h2>{draft.payload.name}</h2><p>{draft.payload.crop} · {draft.payload.area_ha ?? '—'} га</p></div>
                 <span className="privacy-chip">Ждёт синхронизации</span>
               </div>
-              <OfflineMap latitude={draft.payload.latitude} longitude={draft.payload.longitude} compact />
-              <div className="coordinates">⌖ {draft.payload.latitude.toFixed(5)}, {draft.payload.longitude.toFixed(5)}</div>
-              <p className="muted">Локальный ID: {draft.temp_id}. Погода, севооборот и приватность станут доступны после получения серверного ID.</p>
+              <OfflineMap latitude={draft.payload.latitude} longitude={draft.payload.longitude} polygon={draft.payload.geometry} compact />
+              <p className="muted">Контур сохранён локально. Погода, севооборот и приватность станут доступны после получения серверного ID.</p>
             </article>
           ))}
         </div>
@@ -160,9 +238,9 @@ export function FieldsPage({ user }: { user: User }) {
         <div className="field-list">
           {fields.map((field) => (
             <article className="field-card" key={field.id}>
-              <div className="field-card-heading"><div><h2>{field.name}</h2><p>{field.crop} · {field.area_ha} га</p></div><span className="privacy-chip">{field.privacy_variant === 'B' ? 'Доступ по запросу' : 'Публично'}</span></div>
-              <OfflineMap latitude={field.latitude} longitude={field.longitude} compact />
-              <div className="coordinates">⌖ {field.latitude.toFixed(5)}, {field.longitude.toFixed(5)}</div>
+              <div className="field-card-heading"><div><h2>{field.name}</h2><p>{field.crop} · {field.area_ha ?? '—'} га</p></div><span className="privacy-chip">{field.privacy_variant === 'B' ? 'Доступ по запросу' : 'Публично'}</span></div>
+              <OfflineMap latitude={field.latitude} longitude={field.longitude} polygon={field.geometry} compact />
+              <div className="coordinates">Центр: {field.latitude.toFixed(5)}, {field.longitude.toFixed(5)}</div>
               <WeatherPanel field={field} user={user} />
               <CropRotation field={field} user={user} />
             </article>
