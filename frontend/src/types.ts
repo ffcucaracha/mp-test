@@ -23,6 +23,11 @@ export type GamificationMetrics = {
 export type PrivacyVariant = 'A' | 'B'
 export type VisitRequestStatus = 'pending' | 'approved' | 'declined'
 
+export type GeoJsonPolygon = {
+  type: 'Polygon'
+  coordinates: number[][][]
+}
+
 export type AgroField = {
   id: number
   owner_id: number
@@ -32,11 +37,13 @@ export type AgroField = {
   latitude: number
   longitude: number
   area_ha: number | null
+  geometry: GeoJsonPolygon
   privacy_variant: PrivacyVariant
   created_at: string
 }
 
 export type FieldCreate = Pick<AgroField, 'name' | 'crop' | 'latitude' | 'longitude' | 'area_ha'> & {
+  geometry: GeoJsonPolygon | null
   rotation?: string
   privacy_variant?: PrivacyVariant
 }
@@ -63,6 +70,7 @@ export type PublicField = {
   area_ha: number | null
   latitude: number | null
   longitude: number | null
+  geometry: GeoJsonPolygon | null
   approximate_latitude: number
   approximate_longitude: number
   visit_request_status: VisitRequestStatus | null
