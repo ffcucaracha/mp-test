@@ -17,9 +17,13 @@ export function closePolygon(points: LonLat[]): GeoJsonPolygon | null {
 
 export function polygonOpenRing(geometry: GeoJsonPolygon | null | undefined): LonLat[] {
   const ring = geometry?.coordinates?.[0]
-  if (!ring || ring.length < 2) return []
-  const open = ring.slice(0, -1)
-  return open.map((point) => [Number(point[0]), Number(point[1])])
+  if (!ring || ring.length === 0) return []
+  const normalized = ring.map((point) => [Number(point[0]), Number(point[1])] as LonLat)
+  if (normalized.length === 1) return normalized
+  const [firstLon, firstLat] = normalized[0]
+  const [lastLon, lastLat] = normalized[normalized.length - 1]
+  const isClosed = firstLon === lastLon && firstLat === lastLat
+  return isClosed ? normalized.slice(0, -1) : normalized
 }
 
 export function polygonCentroid(geometry: GeoJsonPolygon): { latitude: number; longitude: number } {
