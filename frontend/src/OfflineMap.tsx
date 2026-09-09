@@ -1,5 +1,8 @@
 import { useMemo } from 'react'
 
+import { polygonSvgPoints } from './fieldGeometry'
+import type { GeoJsonPolygon } from './types'
+
 export function latLonToTile(latitude: number, longitude: number, zoom: number) {
   const n = 2 ** zoom
   const x = Math.floor(((longitude + 180) / 360) * n)
@@ -19,16 +22,49 @@ export function fieldTileUrls(latitude: number, longitude: number, zoom: number,
   return urls
 }
 
-export function OfflineMap({ latitude, longitude, compact = false }: { latitude: number; longitude: number; compact?: boolean }) {
-  const zoom = compact ? 12 : 13
-  const tiles = useMemo(() => fieldTileUrls(latitude, longitude, zoom, 1).map((url) => ({ key: url, url })), [latitude, longitude, zoom])
+type MapPolygon = {
+  geometry: GeoJsonPolygon
+  label?: string
+}
+
+type OfflineMapProps = {
+  latitude: number
+  longitude: number
+  compact?: boolean
+  zoom?: number
+  polygon?: GeoJsonPolygon | null
+  polygons?: MapPolygon[]
+}
+
+export function OfflineMap({ latitude, longitude, compact = false, zoom: zoomOverride, polygon, polygons = [] }: OfflineMapProps) {
+  const zoom = zoomOverride ?? (compact ? 12 : 13)
+  const radius = 1
+  const gridSize = (radius * 2 + 1) * 256
+  const tiles = useMemo(() => fieldTileUrls(latitude, longitude, zoom, radius).map((url) => ({ key: url, url })), [latitude, longitude, zoom])
+  const allPolygons = useMemo(() => {
+    const items = polygon ? [{ geometry: polygon }] : []
+    return [...items, ...polygons]
+  }, [polygon, polygons])
 
   return (
     <div className={`map-preview offline-map ${compact ? 'compact' : ''}`} aria-label={`Карта ${latitude}, ${longitude}`}>
       <div className="offline-map-grid">
         {tiles.map((tile) => <img key={tile.key} src={tile.url} alt="" loading="lazy" crossOrigin="anonymous" />)}
       </div>
-      <span className="offline-map-marker" aria-hidden="true">●</span>
+      {allPolygons.length > 0 ? (
+        <svg className="field-map-overlay" viewBox={`0 0 ${gridSize} ${gridSize}`} preserveAspectRatio="none" aria-hidden="true">
+          {allPolygons.map((item, index) => (
+            <g key={`${item.label ?? 'field'}-${index}`}>
+              <polygon
+                className="field-map-polygon"
+                points={polygonSvgPoints(item.geometry, latitude, longitude, zoom, radius)}
+              />
+            </g>
+          ))}
+        </svg>
+      ) : (
+        <span className="offline-map-marker" aria-hidden="true">●</span>
+      )}
       {!navigator.onLine && <span className="offline-map-badge">офлайн</span>}
       <small className="map-attribution">© OpenStreetMap</small>
     </div>
