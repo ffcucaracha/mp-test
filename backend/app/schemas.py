@@ -7,6 +7,8 @@ from .field_geometry import normalize_field_geometry
 
 PostStatus = Literal["sowing", "sprouts", "flowering", "problem", "harvest", "treatment"]
 AlertType = Literal["disease", "pesticide", "weather"]
+FeedbackDiaryIntent = Literal["yes", "probably_yes", "probably_no", "no"]
+FeedbackFeature = Literal["local_events", "field_history", "alerts", "neighbors", "plant_analysis"]
 
 
 class UserOut(BaseModel):
@@ -237,3 +239,24 @@ class AlertOut(BaseModel):
 
 class AlertOpen(BaseModel):
     user_id: int
+
+
+class FeedbackCreate(BaseModel):
+    rating: int = PydanticField(ge=1, le=5)
+    liked_text: str = PydanticField(default="", max_length=2000)
+    improvement_text: str = PydanticField(default="", max_length=2000)
+    local_network_score: int = PydanticField(ge=1, le=5)
+    field_diary_intent: FeedbackDiaryIntent
+    alerts_score: int = PydanticField(ge=1, le=5)
+    privacy_comfort_score: int = PydanticField(ge=1, le=5)
+    most_valuable_feature: FeedbackFeature
+    app_version: str = PydanticField(default="mvp", max_length=64)
+
+
+class FeedbackOut(FeedbackCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    privacy_variant: Literal["A", "B"] | None = None
+    created_at: datetime
