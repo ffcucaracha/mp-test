@@ -1,0 +1,169 @@
+.feedback-card {
+  margin: 16px;
+  padding: 18px;
+  border: 1px solid #cfd8ce;
+  border-radius: 18px;
+  background: #fbfcfa;
+  display: grid;
+  gap: 14px;
+}
+
+.feedback-card h2,
+.feedback-card h3,
+.feedback-card p {
+  margin-bottom: 0;
+}
+
+.feedback-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feedback-card-head p {
+  margin-top: 6px;
+  color: #526056;
+  line-height: 1.4;
+}
+
+.feedback-current-rating {
+  flex: 0 0 auto;
+  font-size: 18px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.feedback-latest-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 12px;
+  background: #eef4eb;
+}
+
+.feedback-latest-row span,
+.feedback-latest-row small {
+  color: #526056;
+}
+
+.feedback-latest-row small {
+  grid-column: 1 / -1;
+}
+
+.feedback-open-button {
+  min-height: 48px;
+  width: 100%;
+}
+
+.feedback-form {
+  display: grid;
+  gap: 16px;
+  padding-top: 4px;
+}
+
+.feedback-form textarea,
+.feedback-form select {
+  width: 100%;
+}
+
+.feedback-hypotheses {
+  display: grid;
+  gap: 16px;
+  padding-top: 4px;
+  border-top: 1px solid #d9e1d7;
+}
+
+.feedback-score-question,
+.feedback-choice-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.feedback-score-question legend,
+.feedback-choice-group legend {
+  font-weight: 650;
+  line-height: 1.35;
+  color: #263228;
+}
+
+.feedback-score-row,
+.feedback-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-score-row button,
+.feedback-choice-row button {
+  min-width: 48px;
+  min-height: 48px;
+  border: 2px solid #b9c6b7;
+  border-radius: 12px;
+  background: #fff;
+  color: #243128;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.feedback-score-row button {
+  font-size: 19px;
+}
+
+.feedback-choice-row button {
+  padding: 8px 12px;
+}
+
+.feedback-score-row button.selected,
+.feedback-choice-row button.selected {
+  border-color: #315f2b;
+  background: #dcebd8;
+  color: #173e1d;
+  box-shadow: inset 0 0 0 1px #315f2b;
+}
+
+.feedback-score-row button:focus-visible,
+.feedback-choice-row button:focus-visible {
+  outline: 3px solid #315f2b;
+  outline-offset: 2px;
+}
+
+.feedback-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.feedback-form-actions button {
+  min-height: 48px;
+  min-width: 112px;
+}
+
+@media (max-width: 520px) {
+  .feedback-card {
+    margin: 12px;
+    padding: 15px;
+  }
+
+  .feedback-card-head {
+    display: grid;
+  }
+
+  .feedback-current-rating {
+    font-size: 17px;
+  }
+
+  .feedback-form-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .feedback-form-actions button {
+    min-width: 0;
+  }
+}
