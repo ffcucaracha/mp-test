@@ -13,6 +13,28 @@ export type User = {
 
 export type UserUpdate = Omit<User, 'id' | 'username'>
 
+export type FeedbackDiaryIntent = 'yes' | 'probably_yes' | 'probably_no' | 'no'
+export type FeedbackFeature = 'local_events' | 'field_history' | 'alerts' | 'neighbors' | 'plant_analysis'
+
+export type FeedbackCreate = {
+  rating: number
+  liked_text: string
+  improvement_text: string
+  local_network_score: number
+  field_diary_intent: FeedbackDiaryIntent
+  alerts_score: number
+  privacy_comfort_score: number
+  most_valuable_feature: FeedbackFeature
+  app_version: string
+}
+
+export type UserFeedback = FeedbackCreate & {
+  id: number
+  user_id: number
+  privacy_variant: PrivacyVariant | null
+  created_at: string
+}
+
 export type GamificationMetrics = {
   profile_completeness: number
   neighbors: number
