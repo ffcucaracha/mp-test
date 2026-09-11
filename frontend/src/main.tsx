@@ -4,6 +4,7 @@ import App from './App'
 import './styles.css'
 import './stage15.css'
 import './field-visibility.css'
+import './feedback.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
