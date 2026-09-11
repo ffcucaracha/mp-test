@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 
 import { api } from './api'
 import { ApiarySection } from './ApiarySection'
+import { FeedbackSection } from './FeedbackSection'
 import { GamificationCard } from './GamificationCard'
 import type { User, UserUpdate } from './types'
 
@@ -81,6 +82,8 @@ export function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: 
       </form>
 
       {user.is_beekeeper && <ApiarySection user={user} />}
+
+      <FeedbackSection userId={user.id} />
 
       <button type="button" className="secondary-button logout-button" onClick={onLogout}>Сменить пользователя</button>
     </section>
