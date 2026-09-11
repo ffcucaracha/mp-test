@@ -6,6 +6,7 @@ import type {
   Apiary,
   ApiaryCreate,
   CropSeason,
+  FeedbackCreate,
   FeedPost,
   FieldCreate,
   FieldWeather,
@@ -19,6 +20,7 @@ import type {
   PrivacyVariant,
   PublicField,
   User,
+  UserFeedback,
   UserUpdate,
   VisitRequest,
   VisitRequestStatus,
@@ -100,6 +102,11 @@ export const api = {
   gamification: (userId: number) => request<GamificationMetrics>(`/api/users/${userId}/gamification`),
   updateUser: (userId: number, payload: UserUpdate) =>
     request<User>(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  latestFeedback: (userId: number) => request<UserFeedback | null>(`/api/users/${userId}/feedback/latest`),
+  feedbackHistory: (userId: number) => request<UserFeedback[]>(`/api/users/${userId}/feedback/history`),
+  feedbackOpened: (userId: number) => request<{ ok: boolean }>(`/api/users/${userId}/feedback/opened`, { method: 'POST' }),
+  submitFeedback: (userId: number, payload: FeedbackCreate) =>
+    request<UserFeedback>(`/api/users/${userId}/feedback`, { method: 'POST', body: JSON.stringify(payload) }),
   fields: (userId: number) => request<AgroField[]>(`/api/users/${userId}/fields`),
   field: (fieldId: number) => request<AgroField>(`/api/fields/${fieldId}`),
   createField: (userId: number, payload: FieldCreate) =>
