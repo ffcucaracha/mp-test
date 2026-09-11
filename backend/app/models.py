@@ -30,6 +30,7 @@ class User(Base):
     apiaries: Mapped[list["Apiary"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="author", cascade="all, delete-orphan")
     alert_recipients: Mapped[list["AlertRecipient"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    feedback_entries: Mapped[list["UserFeedback"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Field(Base):
@@ -200,3 +201,23 @@ class PlantHealthAnalysis(Base):
     posted_post_id: Mapped[int | None] = mapped_column(ForeignKey("posts.id", ondelete="SET NULL"), nullable=True, index=True)
     feedback_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+
+class UserFeedback(Base):
+    __tablename__ = "user_feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    rating: Mapped[int] = mapped_column(Integer)
+    liked_text: Mapped[str] = mapped_column(Text, default="")
+    improvement_text: Mapped[str] = mapped_column(Text, default="")
+    local_network_score: Mapped[int] = mapped_column(Integer)
+    field_diary_intent: Mapped[str] = mapped_column(String(24))
+    alerts_score: Mapped[int] = mapped_column(Integer)
+    privacy_comfort_score: Mapped[int] = mapped_column(Integer)
+    most_valuable_feature: Mapped[str] = mapped_column(String(40))
+    app_version: Mapped[str] = mapped_column(String(64), default="mvp")
+    privacy_variant: Mapped[str | None] = mapped_column(String(1), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+    user: Mapped[User] = relationship(back_populates="feedback_entries")
