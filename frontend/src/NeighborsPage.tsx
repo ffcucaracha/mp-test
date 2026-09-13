@@ -82,7 +82,7 @@ export function NeighborsPage({ currentUser }: { currentUser: User }) {
 
     {selected && <section className="neighbor-profile-card neighbor-fields-panel">
       <div className="section-heading"><div><h2>Поля: {selected.user.farm_name || selected.user.name}</h2><p>{selected.fields_count} полей · {formatArea(selected.total_area_ha)}</p></div><button className="secondary-button compact-button" type="button" onClick={() => { setSelected(null); setNeighborFields([]) }}>Закрыть</button></div>
-      {selected.access_request_status !== 'approved' && <div className="access-callout"><div><strong>Доступ ко всем полям</strong><p>{selected.access_request_status === 'pending' ? 'Запрос уже отправлен владельцу хозяйства.' : selected.access_request_status === 'declined' ? 'Владелец пока не открыл доступ. Можно отправить новый запрос позже.' : 'Владелец сможет одним решением открыть точные данные всех полей хозяйства.'}</p></div>{selected.access_request_status !== 'pending' && <button className="primary-button compact-button" type="button" disabled={busyKey === `access-${selected.user.id}`} onClick={() => void requestAccess(selected)}>{busyKey === `access-${selected.user.id}` ? 'Отправляем…' : 'Попросить доступ ко всем'}</button>}</div>}
+      {selected.access_request_status !== 'approved' && <div className="access-callout"><div><strong>{selected.access_request_status === 'pending' ? 'Доступ: ожидает решения' : 'Доступ: не открыт'}</strong><p>{selected.access_request_status === 'pending' ? 'Остальные поля пока закрыты.' : selected.access_request_status === 'declined' ? 'Владелец отказал. Можно отправить запрос ещё раз.' : 'Открыты только публичные поля.'}</p></div>{selected.access_request_status !== 'pending' && <button className="primary-button compact-button" type="button" disabled={busyKey === `access-${selected.user.id}`} onClick={() => void requestAccess(selected)}>{busyKey === `access-${selected.user.id}` ? 'Отправляем…' : 'Запросить доступ'}</button>}</div>}
       {selected.access_request_status === 'approved' && <div className="access-callout granted"><strong>Доступ ко всем полям открыт</strong><span>Видны точные контуры, культуры и история полей.</span></div>}
       <div className="neighbor-fields">{neighborFields.map((field) => <NeighborFieldCard field={field} key={field.id} />)}</div>
     </section>}
@@ -95,8 +95,8 @@ export function NeighborsPage({ currentUser }: { currentUser: User }) {
 }
 
 function NeighborFieldCard({ field }: { field: PublicField }) {
-  if (!field.details_visible) return <article className="neighbor-field-card is-private"><h4>Поле — доступ по запросу</h4><p>Точные контур, культура и площадь будут видны после одобрения владельцем доступа ко всему хозяйству.</p></article>
-  return <article className="neighbor-field-card is-open"><h4>{field.name}</h4><p>{field.crop} · {field.area_ha ? formatArea(field.area_ha) : 'площадь не указана'}</p><div className="field-detail-grid"><span><small>Координаты центра</small><strong>{field.latitude?.toFixed(4)}, {field.longitude?.toFixed(4)}</strong></span><span><small>Доступ</small><strong>{field.privacy_variant === 'A' ? 'Открыто' : 'По разрешению'}</strong></span></div></article>
+  if (!field.details_visible) return <article className="neighbor-field-card is-private"><h4>Доступ закрыт</h4><p>Поле откроется после одобрения.</p></article>
+  return <article className="neighbor-field-card is-open"><h4>{field.name}</h4><p>{field.crop} · {field.area_ha ? formatArea(field.area_ha) : 'площадь не указана'}</p><div className="field-detail-grid"><span><small>Координаты центра</small><strong>{field.latitude?.toFixed(4)}, {field.longitude?.toFixed(4)}</strong></span><span><small>Видимость поля</small><strong>{field.privacy_variant === 'A' ? 'Публично' : 'По разрешению'}</strong></span></div></article>
 }
 
 function formatArea(value: number) { return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value)} га` }
