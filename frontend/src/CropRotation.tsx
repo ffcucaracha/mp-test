@@ -80,7 +80,7 @@ export function CropRotation({ field, user }: { field: AgroField; user: User }) 
 
   return (
     <div className="crop-rotation">
-      <div className="crop-rotation-title"><strong>Севооборот</strong><small>История культур по годам</small></div>
+      <div className="crop-rotation-title"><strong>Севооборот</strong></div>
       {loading ? <small className="muted">Загрузка…</small> : seasons.length === 0 ? <small className="muted">История пока не заполнена.</small> : (
         <div className="crop-timeline">
           {seasons.map((season) => (
