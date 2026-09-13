@@ -333,15 +333,21 @@ def feed(viewer_id: int, db: Session = Depends(get_db)) -> list[FeedPostOut]:
     viewer = _get_user_or_404(db, viewer_id)
     viewer_field = db.scalar(select(Field).where(Field.owner_id == viewer.id).order_by(Field.id))
     posts = list(db.scalars(select(Post).order_by(Post.created_at.desc(), Post.id.desc())).all())
+    neighbor_ids = set(db.scalars(select(Neighbor.neighbor_user_id).where(Neighbor.user_id == viewer.id)).all())
 
     result = []
     for post in posts:
         item = _feed_post(post, viewer, viewer_field)
-        if item.distance_km is None or post.author_id == viewer.id or item.distance_km <= viewer.news_radius_km:
+        if (
+            item.distance_km is None
+            or post.author_id == viewer.id
+            or post.author_id in neighbor_ids
+            or item.distance_km <= viewer.news_radius_km
+        ):
             result.append(item)
 
     result.sort(key=lambda item: (item.score, item.created_at), reverse=True)
-    track("feed_opened", user_id=viewer.id, properties={"items": len(result), "radius_km": viewer.news_radius_km})
+    track("feed_opened", user_id=viewer.id, properties={"items": len(result), "radius_km": viewer.news_radius_km, "neighbors": len(neighbor_ids)})
     return result
 
 
