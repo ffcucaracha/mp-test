@@ -5,6 +5,7 @@ import './styles.css'
 import './stage15.css'
 import './field-visibility.css'
 import './feedback.css'
+import './ux-polish.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
