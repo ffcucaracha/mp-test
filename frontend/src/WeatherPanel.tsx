@@ -33,6 +33,7 @@ export function WeatherPanel({ field, user }: { field: AgroField; user: User }) 
   const [cachedAt, setCachedAt] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [forecastOpen, setForecastOpen] = useState(false)
   const cacheKey = `weather:${user.id}:${field.id}`
 
   const load = useCallback(async (force = false) => {
@@ -81,8 +82,8 @@ export function WeatherPanel({ field, user }: { field: AgroField; user: User }) 
     <section className={`weather-panel ${weather?.frost_risk ? 'has-risk' : ''}`}>
       <div className="weather-panel-heading">
         <div>
-          <strong>{weather?.frost_risk ? '❄️ Риск заморозков' : '🌤 Погода на поле'}</strong>
-          <small>Прогноз на 72 часа · данные {weather?.provider === 'open-meteo' ? 'Open-Meteo' : weather?.provider ?? 'погодного сервиса'}</small>
+          <strong>{weather?.frost_risk ? '❄️ Риск заморозков' : '🌤 Сейчас на поле'}</strong>
+          <small>{weather?.current_source === 'company_station' ? `МС компании ${weather.current_station_name} · ${weather.current_station_distance_km} км` : 'Open-Meteo · по координатам поля'}</small>
           {cachedAt && <small>{navigator.onLine ? 'Обновлено' : 'Офлайн-кэш'}: {formatAge(cachedAt)}</small>}
         </div>
         <button type="button" className="weather-refresh" onClick={() => void load(true)} disabled={loading || !navigator.onLine} title={!navigator.onLine ? 'Обновление будет доступно после появления сети' : 'Обновить прогноз'}>
@@ -96,10 +97,11 @@ export function WeatherPanel({ field, user }: { field: AgroField; user: User }) 
       {weather && (
         <>
           <div className="weather-stats">
-            <div><span>Минимум</span><strong>{formatTemperature(weather.min_temperature_c)}</strong></div>
-            <div><span>Осадки</span><strong>{weather.max_precipitation_probability ?? '—'}{weather.max_precipitation_probability !== null ? '%' : ''}</strong></div>
-            <div><span>Ветер</span><strong>{weather.max_wind_speed_kmh !== null ? `${weather.max_wind_speed_kmh} км/ч` : '—'}</strong></div>
+            <div><span>Температура</span><strong>{weather.current_temperature_c === null ? '—' : formatTemperature(weather.current_temperature_c)}</strong></div>
+            <div><span>Осадки</span><strong>{weather.current_precipitation_mm === null ? '—' : `${weather.current_precipitation_mm} мм`}</strong></div>
+            <div><span>Ветер</span><strong>{weather.current_wind_speed_kmh === null ? '—' : `${weather.current_wind_speed_kmh} км/ч`}</strong></div>
           </div>
+          <button type="button" className="weather-forecast-button" onClick={() => setForecastOpen(true)}>Прогноз на 72 часа</button>
 
           {weather.frost_risk ? (
             <div className="frost-warning">
@@ -110,6 +112,7 @@ export function WeatherPanel({ field, user }: { field: AgroField; user: User }) 
           ) : (
             <p className="weather-ok">При пороге 0 °C заморозков в ближайшие 72 часа не ожидается.</p>
           )}
+          {forecastOpen && <div className="weather-modal-backdrop" role="presentation" onClick={() => setForecastOpen(false)}><section className="weather-modal" role="dialog" aria-modal="true" aria-label={`Прогноз для ${field.name}`} onClick={(event) => event.stopPropagation()}><div className="weather-panel-heading"><div><strong>Прогноз: {field.name}</strong><small>Open-Meteo · по координатам поля</small></div><button type="button" className="weather-refresh" onClick={() => setForecastOpen(false)}>×</button></div><div className="weather-hours">{weather.hours.map((hour) => <div key={hour.time}><time>{formatDate(hour.time)}</time><strong>{formatTemperature(hour.temperature_c)}</strong><span>💨 {hour.wind_speed_kmh ?? '—'} км/ч</span><span>☔ {hour.precipitation_probability ?? '—'}%</span></div>)}</div></section></div>}
         </>
       )}
     </section>
