@@ -92,6 +92,7 @@ class Post(Base):
     photo_data_url: Mapped[str] = mapped_column(Text)
     latitude: Mapped[float] = mapped_column(Float)
     longitude: Mapped[float] = mapped_column(Float)
+    is_private: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     author: Mapped[User] = relationship(back_populates="posts")
     field: Mapped[Field] = relationship(back_populates="posts")

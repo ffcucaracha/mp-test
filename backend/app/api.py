@@ -138,6 +138,7 @@ def _feed_post(post: Post, viewer: User | None, viewer_field: Field | None) -> F
         photo_data_url=post.photo_data_url,
         latitude=post.latitude,
         longitude=post.longitude,
+        is_private=post.is_private,
         created_at=post.created_at,
         author=UserOut.model_validate(post.author),
         field_id=post.field_id,
@@ -348,7 +349,7 @@ def create_post(payload: PostCreate, db: Session = Depends(get_db)) -> FeedPostO
 
 
 @router.get("/feed", response_model=list[FeedPostOut], tags=["Feed"], summary="Получить локальную ленту и посты соседей")
-def feed(viewer_id: int, db: Session = Depends(get_db)) -> list[FeedPostOut]:
+def feed(viewer_id: int, only_mine: bool = False, db: Session = Depends(get_db)) -> list[FeedPostOut]:
     viewer = _get_user_or_404(db, viewer_id)
     viewer_field = db.scalar(select(Field).where(Field.owner_id == viewer.id).order_by(Field.id))
     posts = list(db.scalars(select(Post).order_by(Post.created_at.desc(), Post.id.desc())).all())
@@ -356,6 +357,10 @@ def feed(viewer_id: int, db: Session = Depends(get_db)) -> list[FeedPostOut]:
 
     result = []
     for post in posts:
+        if post.is_private and post.author_id != viewer.id:
+            continue
+        if only_mine and post.author_id != viewer.id:
+            continue
         item = _feed_post(post, viewer, viewer_field)
         if (
             item.distance_km is None
@@ -366,7 +371,7 @@ def feed(viewer_id: int, db: Session = Depends(get_db)) -> list[FeedPostOut]:
             result.append(item)
 
     result.sort(key=lambda item: (item.score, item.created_at), reverse=True)
-    track("feed_opened", user_id=viewer.id, properties={"items": len(result), "radius_km": viewer.news_radius_km, "neighbors": len(neighbor_ids)})
+    track("feed_opened", user_id=viewer.id, properties={"items": len(result), "radius_km": viewer.news_radius_km, "neighbors": len(neighbor_ids), "only_mine": only_mine})
     return result
 
 

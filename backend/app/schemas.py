@@ -179,6 +179,7 @@ class PostCreate(BaseModel):
     photo_data_url: str = PydanticField(min_length=10, max_length=4_500_000)
     latitude: float = PydanticField(ge=-90, le=90)
     longitude: float = PydanticField(ge=-180, le=180)
+    is_private: bool = False
 
 
 class FeedPostOut(BaseModel):
@@ -188,6 +189,7 @@ class FeedPostOut(BaseModel):
     photo_data_url: str
     latitude: float
     longitude: float
+    is_private: bool
     created_at: datetime
     author: UserOut
     field_id: int

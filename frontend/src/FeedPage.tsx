@@ -35,6 +35,7 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
   const [photoName, setPhotoName] = useState('')
   const [mlAnalysis, setMlAnalysis] = useState<PlantHealthAnalysis | null>(null)
   const [notifyNeighbors, setNotifyNeighbors] = useState(true)
+  const [onlyMine, setOnlyMine] = useState(false)
   const [draft, setDraft] = useState<PostCreate>({
     author_id: currentUser.id,
     field_id: 0,
@@ -43,18 +44,19 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
     photo_data_url: '',
     latitude: 0,
     longitude: 0,
+    is_private: false,
   })
 
   const reloadFeed = useCallback(async () => {
-    const data = await api.feed(currentUser.id)
+    const data = await api.feed(currentUser.id, onlyMine)
     setPosts(data)
-  }, [currentUser.id])
+  }, [currentUser.id, onlyMine])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError('')
-    Promise.all([api.fields(currentUser.id), api.feed(currentUser.id)])
+    Promise.all([api.fields(currentUser.id), api.feed(currentUser.id, onlyMine)])
       .then(([fieldData, feedData]) => {
         if (cancelled) return
         setFields(fieldData)
@@ -67,7 +69,7 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
       .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить ленту') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [currentUser.id])
+  }, [currentUser.id, onlyMine])
 
   useEffect(() => {
     const handleSync = () => { void reloadFeed().catch(() => undefined) }
@@ -104,7 +106,7 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
   }
 
   function resetComposer() {
-    setDraft((current) => ({ ...current, text: '', status: 'problem', photo_data_url: '' }))
+    setDraft((current) => ({ ...current, text: '', status: 'problem', photo_data_url: '', is_private: false }))
     setMlAnalysis(null)
     setPhotoName('')
     setShowComposer(false)
@@ -219,7 +221,7 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
 
   return (
     <section className="social-feed-page">
-      <div className="feed-page-heading"><div><h1>Лента рядом</h1><p>Публикации из хозяйств в радиусе {currentUser.news_radius_km} км, выше — записи с лучшей оценкой.</p></div><button type="button" className="primary-button compact-button" disabled={fields.length === 0} onClick={() => setShowComposer((value) => !value)}>{showComposer ? 'Закрыть' : '+ Публикация'}</button></div>
+      <div className="feed-page-heading"><div><h1>{onlyMine ? 'Мои записи' : 'Лента рядом'}</h1><p>{onlyMine ? 'Личные и опубликованные вами записи с полей.' : `Публикации из хозяйств в радиусе ${currentUser.news_radius_km} км и от добавленных соседей.`}</p></div><div className="feed-header-actions"><label className="feed-toggle"><input type="checkbox" checked={onlyMine} onChange={(event) => setOnlyMine(event.target.checked)} /><span>Только мои</span></label><button type="button" className="primary-button compact-button" disabled={fields.length === 0} onClick={() => setShowComposer((value) => !value)}>{showComposer ? 'Закрыть' : '+ Публикация'}</button></div></div>
       <MonetizationExperiment currentUser={currentUser} />
       {fields.length === 0 && !loading && <div className="feed-info-card"><strong>Для публикации нужно поле</strong><p>Перейдите в раздел «Поля», добавьте его и привяжите к географии.</p></div>}
       {showComposer && selectedField && (
@@ -235,13 +237,14 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
           {draft.status === 'problem' && draft.photo_data_url && !navigator.onLine && <div className="feed-info-card"><p>AI-анализ требует сети. Фото можно сохранить сейчас и проанализировать позже.</p></div>}
           {mlAnalysis && ['accepted', 'corrected'].includes(mlAnalysis.feedback_status) && <label className="feed-field"><span><input type="checkbox" checked={notifyNeighbors} onChange={(event) => setNotifyNeighbors(event.target.checked)} />{' '}После публикации предупредить моих соседей в радиусе</span></label>}
           <label className="feed-field"><span>Комментарий (необязательно)</span><textarea rows={3} value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} placeholder="Что заметили? Нужен совет?" /></label>
+          <label className="feed-toggle private-post-toggle"><input type="checkbox" checked={draft.is_private} onChange={(event) => setDraft({ ...draft, is_private: event.target.checked })} /><span><b>Только для меня</b><small>Запись сохранится в дневнике, но не появится у соседей и в общей ленте.</small></span></label>
           <div className="publication-meta"><span>⌖ {draft.latitude.toFixed(4)}, {draft.longitude.toFixed(4)}</span><span>{selectedField.crop}</span></div>
           <button className="primary-button full-width" type="submit" disabled={submitting}>{submitting ? 'Сохраняем…' : navigator.onLine ? 'Опубликовать' : 'Сохранить и отправить позже'}</button>
         </form>
       )}
       {error && <div className="error-banner">{error}</div>}
       {notice && <div className="feed-info-card"><p>{notice}</p></div>}
-      {loading ? <p>Загрузка ленты…</p> : posts.length === 0 ? <div className="feed-info-card"><strong>В радиусе пока тихо</strong><p>Создайте первую публикацию с поля.</p></div> : <div className="social-feed-list">{posts.map((post) => <PostCard key={post.id} post={post} currentUser={currentUser} onReact={(value) => void react(post.id, value)} onComment={(text) => comment(post.id, text)} />)}</div>}
+      {loading ? <p>Загрузка ленты…</p> : posts.length === 0 ? <div className="feed-info-card"><strong>{onlyMine ? 'У вас пока нет записей' : 'В радиусе пока тихо'}</strong><p>Создайте первую публикацию с поля.</p></div> : <div className="social-feed-list">{posts.map((post) => <PostCard key={post.id} post={post} currentUser={currentUser} onReact={(value) => void react(post.id, value)} onComment={(text) => comment(post.id, text)} />)}</div>}
     </section>
   )
 }
@@ -252,7 +255,7 @@ function PostCard({ post, currentUser, onReact, onComment }: { post: FeedPost; c
   async function submitComment(event: FormEvent) { event.preventDefault(); const text = commentText.trim(); if (!text) return; setCommenting(true); try { await onComment(text); setCommentText('') } finally { setCommenting(false) } }
   return (
     <article className="social-post-card">
-      <div className="social-post-author"><Avatar name={post.author.name} /><div><strong>{post.author.name}</strong><span>@{post.author.username} · {post.author.region}</span></div><span className={`post-score ${post.score < 0 ? 'negative' : ''}`}>score {post.score > 0 ? `+${post.score}` : post.score}</span></div>
+      <div className="social-post-author"><Avatar name={post.author.name} /><div><strong>{post.author.name}</strong><span>@{post.author.username} · {post.author.region}</span><time dateTime={post.created_at}>{formatPostTime(post.created_at)}</time></div>{post.is_private && <span className="private-post-badge">Только для меня</span>}<span className={`post-score ${post.score < 0 ? 'negative' : ''}`}>score {post.score > 0 ? `+${post.score}` : post.score}</span></div>
       <div className="post-context-row"><span className={`status-chip status-${post.status}`}>{STATUS_LABELS[post.status]}</span><span>{post.field_name} · {post.crop}</span>{post.distance_km !== null && <span>⌖ {post.distance_km} км</span>}</div>
       <img className="post-photo" src={post.photo_data_url} alt={`${STATUS_LABELS[post.status]} — ${post.crop}`} />
       {post.text && <p className="social-post-text">{post.text}</p>}
@@ -264,6 +267,8 @@ function PostCard({ post, currentUser, onReact, onComment }: { post: FeedPost; c
 }
 
 function Avatar({ name, small = false }: { name: string; small?: boolean }) { const initials = name.split(' ').map((part) => part[0]).join('').slice(0, 2); return <div className={`feed-avatar ${small ? 'small' : ''}`}>{initials}</div> }
+
+function formatPostTime(value: string) { return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) }
 
 async function resizeImage(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) throw new Error('Выберите изображение')

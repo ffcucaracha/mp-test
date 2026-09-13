@@ -127,6 +127,7 @@ export type FeedPost = {
   photo_data_url: string
   latitude: number
   longitude: number
+  is_private: boolean
   created_at: string
   author: User
   field_id: number
@@ -148,6 +149,7 @@ export type PostCreate = {
   photo_data_url: string
   latitude: number
   longitude: number
+  is_private: boolean
 }
 
 export type PlantHealthProviderName = 'kindwise' | 'gemini' | 'plantvillage' | 'demo'

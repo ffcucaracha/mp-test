@@ -11,6 +11,13 @@
   gap: 12px;
 }
 
+.feed-header-actions { display: flex; align-items: center; gap: 10px; }
+.feed-toggle { display: inline-flex; align-items: center; gap: 8px; color: #415741; font-size: 13px; font-weight: 700; cursor: pointer; }
+.feed-toggle input { width: 17px; height: 17px; accent-color: #2f6b3c; }
+.private-post-toggle { align-items: flex-start; border-radius: 12px; background: #f3f7f1; padding: 10px 12px; }
+.private-post-toggle span { display: grid; gap: 2px; }
+.private-post-toggle small { color: #687768; font-weight: 400; }
+
 .feed-page-heading h1,
 .publication-composer h2 {
   margin: 0;
@@ -187,6 +194,9 @@
   color: #6d786d;
   font-size: 12px;
 }
+
+.social-post-author time { color: #8a968a; font-size: 11px; }
+.private-post-badge { border-radius: 999px; padding: 5px 8px; background: #f0eee8; color: #6c5b37 !important; font-size: 11px !important; font-weight: 800; white-space: nowrap; }
 
 .feed-avatar {
   width: 42px;

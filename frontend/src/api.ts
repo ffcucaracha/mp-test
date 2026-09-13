@@ -122,7 +122,7 @@ export const api = {
     request<CropSeason>(`/api/fields/${fieldId}/crop-seasons`, { method: 'POST', body: JSON.stringify({ user_id: userId, year, crop }) }),
   checkFieldWeather: (fieldId: number, userId: number, frostThresholdC = 0, hours = 72) =>
     request<FieldWeather>(`/api/fields/${fieldId}/weather/check`, { method: 'POST', body: JSON.stringify({ user_id: userId, frost_threshold_c: frostThresholdC, hours }) }),
-  feed: (viewerId: number) => request<FeedPost[]>(`/api/feed?viewer_id=${viewerId}`),
+  feed: (viewerId: number, onlyMine = false) => request<FeedPost[]>(`/api/feed?viewer_id=${viewerId}${onlyMine ? '&only_mine=true' : ''}`),
   createPost: (payload: PostCreate) => request<FeedPost>('/api/posts', { method: 'POST', body: JSON.stringify(payload) }),
   setReaction: (postId: number, userId: number, value: -1 | 1) => request<FeedPost>(`/api/posts/${postId}/reaction`, { method: 'PUT', body: JSON.stringify({ user_id: userId, value }) }),
   addComment: (postId: number, authorId: number, text: string) => request<FeedPost>(`/api/posts/${postId}/comments`, { method: 'POST', body: JSON.stringify({ author_id: authorId, text }) }),

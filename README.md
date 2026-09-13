@@ -67,6 +67,19 @@ docker compose up --build
 - ReDoc: `http://localhost:8000/redoc`
 - OpenAPI JSON: `http://localhost:8000/openapi.json` (сценарии и правила доступа — в [docs/API.md](docs/API.md))
 - Внутренняя панель для демо жюри: `http://localhost:8000/internal/dashboard` — метрики и отзывы из текущей БД.
+
+### Настройка анализа растений
+
+Без ключей приложение работает в режиме `Demo · offline`: он нужен для показа сценария, но не
+делает реальную диагностику. Для Kindwise создайте `.env` рядом с `docker-compose.yml`:
+
+```dotenv
+PLANT_HEALTH_PROVIDER=kindwise
+CROP_HEALTH_API_KEY=ваш_ключ_Kindwise
+```
+
+Затем выполните `docker compose up -d --build`. Для Gemini вместо этого задайте
+`PLANT_HEALTH_PROVIDER=gemini` и `GEMINI_API_KEY`. Ключи не добавляйте в Git.
 - ping: `http://localhost:8000/api/health`
 - PostgreSQL: `localhost:5432`
 
