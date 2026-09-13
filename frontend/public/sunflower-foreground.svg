@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Подсолнух">
+  <g fill="#f7c331">
+    <ellipse cx="256" cy="92" rx="48" ry="124"/><ellipse cx="256" cy="420" rx="48" ry="124"/><ellipse cx="92" cy="256" rx="124" ry="48"/><ellipse cx="420" cy="256" rx="124" ry="48"/>
+    <ellipse cx="140" cy="140" rx="48" ry="124" transform="rotate(-45 140 140)"/><ellipse cx="372" cy="140" rx="48" ry="124" transform="rotate(45 372 140)"/><ellipse cx="140" cy="372" rx="48" ry="124" transform="rotate(45 140 372)"/><ellipse cx="372" cy="372" rx="48" ry="124" transform="rotate(-45 372 372)"/>
+  </g>
+  <circle cx="256" cy="256" r="108" fill="#5a3a1e"/><circle cx="256" cy="256" r="73" fill="#7a4e25"/>
+  <g fill="#3d2819"><circle cx="222" cy="218" r="10"/><circle cx="260" cy="205" r="10"/><circle cx="294" cy="224" r="10"/><circle cx="210" cy="259" r="10"/><circle cx="251" cy="255" r="10"/><circle cx="299" cy="268" r="10"/><circle cx="227" cy="298" r="10"/><circle cx="272" cy="305" r="10"/></g>
+</svg>
