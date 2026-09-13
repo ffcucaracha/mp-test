@@ -274,6 +274,15 @@ export type FieldWeather = {
   max_wind_speed_kmh: number | null
   alert_id: number | null
   alert_created: boolean
+  current_source: 'company_station' | 'open_meteo'
+  current_station_name: string | null
+  current_station_distance_km: number | null
+  current_observed_at: string | null
+  current_temperature_c: number | null
+  current_apparent_temperature_c: number | null
+  current_wind_speed_kmh: number | null
+  current_wind_gust_kmh: number | null
+  current_precipitation_mm: number | null
   hours: WeatherHour[]
 }
 
