@@ -49,10 +49,18 @@ def sync_company_weather_stations(db: Session) -> int:
 
 
 def _device_list(payload: Any) -> list[dict[str, Any]]:
-    if isinstance(payload, list): return [x for x in payload if isinstance(x, dict)]
+    if isinstance(payload, list):
+        return [x for x in payload if isinstance(x, dict)]
     if isinstance(payload, dict):
-        for key in ("data", "devices", "items", "results"):
-            if isinstance(payload.get(key), list): return [x for x in payload[key] if isinstance(x, dict)]
+        for key in ("devices", "items", "results", "data"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [x for x in value if isinstance(x, dict)]
+            # The company gateway can wrap the service response as data.devices.
+            if isinstance(value, dict):
+                nested = _device_list(value)
+                if nested:
+                    return nested
     return []
 
 
