@@ -31,7 +31,9 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',
-        icons: []
+        icons: [
+          { src: '/sunflower.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+        ]
       }
     })
   ]
