@@ -45,10 +45,11 @@ export function OfflineStatus() {
   }, [])
 
   const sync = useCallback(async () => {
-    if (!navigator.onLine || syncing) return
+    if (syncing) return
     setSyncing(true)
     setMessage('')
     try {
+      if (!navigator.onLine) { setMessage('Нет интернета. Действия сохранены на устройстве.'); return }
       const result = await syncOutbox()
       setPending(result.pending)
       if (result.synced > 0) setMessage(`Отправлено: ${result.synced}`)
