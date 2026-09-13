@@ -12,7 +12,7 @@ import './offline.css'
 import { FeedPage } from './FeedPage'
 import { FieldsPage } from './FieldsPage'
 import { NeighborsPage } from './NeighborsPage'
-import { OfflineStatus } from './OfflineStatus'
+import { DraftsButton, OfflineStatus } from './OfflineStatus'
 import { ProfilePage } from './ProfilePage'
 import type { User } from './types'
 
@@ -35,23 +35,10 @@ function AgroConnectApp() {
 
   useEffect(() => {
     let cancelled = false
+    api.users().then((usersData) => { if (!cancelled) setUsers(usersData) }).catch(() => { if (!cancelled) setUsers([]) }).finally(() => { if (!cancelled) setLoading(false) })
 
-    api.users()
-      .then((usersData) => {
-        if (!cancelled) setUsers(usersData)
-      })
-      .catch(() => {
-        if (!cancelled) setUsers([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    if (!navigator.onLine) {
-      setServerOk(false)
-    } else {
-      api.health().then(() => setServerOk(true)).catch(() => setServerOk(false))
-    }
+    if (!navigator.onLine) setServerOk(false)
+    else api.health().then(() => setServerOk(true)).catch(() => setServerOk(false))
 
     const online = () => api.health().then(() => setServerOk(true)).catch(() => setServerOk(false))
     const offline = () => setServerOk(false)
@@ -64,10 +51,7 @@ function AgroConnectApp() {
     }
   }, [])
 
-  const currentUser = useMemo(
-    () => users.find((user) => user.id === selectedUserId) ?? null,
-    [selectedUserId, users],
-  )
+  const currentUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [selectedUserId, users])
 
   function login(userId: number) {
     localStorage.setItem('agroconnect.userId', String(userId))
@@ -94,22 +78,14 @@ function AgroConnectApp() {
           <div className="brand-mark">AC</div>
           <h1>AgroConnect</h1>
           <p className="muted">Рабочая сеть для сельхозпроизводителей</p>
-          <div className={`server-status ${serverOk ? 'ok' : 'error'}`}>
-            <span className="status-dot" />
-            {serverOk ? 'Сервер доступен' : navigator.onLine ? 'Нет связи с сервером' : 'Нет интернета'}
-          </div>
+          <div className={`server-status ${serverOk ? 'ok' : 'error'}`}><span className="status-dot" />{serverOk ? 'Сервер доступен' : navigator.onLine ? 'Нет связи с сервером' : 'Нет интернета'}</div>
           <h2>Выберите тестового пользователя</h2>
-          {users.length === 0 && !navigator.onLine && (
-            <p className="muted">Первый вход требует интернет. После первого успешного запуска профиль и рабочие данные доступны из локального кэша.</p>
-          )}
+          {users.length === 0 && !navigator.onLine && <p className="muted">Первый вход требует интернет. После первого успешного запуска профиль и рабочие данные доступны из локального кэша.</p>}
           <div className="user-list">
             {users.map((user) => (
               <button key={user.id} className="user-option" onClick={() => login(user.id)}>
                 <Avatar name={user.name} />
-                <span>
-                  <strong>{user.name}</strong>
-                  <small>@{user.username} · {user.region}</small>
-                </span>
+                <span><strong>{user.name}</strong><small>@{user.username} · {user.region}</small></span>
                 <span className="chevron">›</span>
               </button>
             ))}
@@ -122,11 +98,9 @@ function AgroConnectApp() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <strong>AgroConnect</strong>
-          <small>{currentUser.farm_name || currentUser.region}</small>
-        </div>
+        <div><strong>AgroConnect</strong><small>{currentUser.farm_name || currentUser.region}</small></div>
         <div className="topbar-actions">
+          <DraftsButton />
           <AlertsBell user={currentUser} />
           <Avatar name={currentUser.name} small />
         </div>
