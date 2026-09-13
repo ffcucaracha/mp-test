@@ -99,6 +99,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ status: string; service: string }>('/api/health'),
   users: () => request<User[]>('/api/users'),
+  searchNeighbors: (userId: number, query: string) => request<User[]>(`/api/neighbors/search?user_id=${userId}&q=${encodeURIComponent(query)}`),
   user: (userId: number) => request<User>(`/api/users/${userId}`),
   gamification: (userId: number) => request<GamificationMetrics>(`/api/users/${userId}/gamification`),
   updateUser: (userId: number, payload: UserUpdate) =>
