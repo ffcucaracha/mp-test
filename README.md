@@ -66,6 +66,7 @@ docker compose up --build
 - Swagger FastAPI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 - OpenAPI JSON: `http://localhost:8000/openapi.json` (сценарии и правила доступа — в [docs/API.md](docs/API.md))
+- Внутренняя панель для демо жюри: `http://localhost:8000/internal/dashboard` — метрики и отзывы из текущей БД.
 - ping: `http://localhost:8000/api/health`
 - PostgreSQL: `localhost:5432`
 

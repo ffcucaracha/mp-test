@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api import router
+from .dashboard import router as dashboard_router
 from .features import router as features_router
 from .feedback import router as feedback_router
 from .monetization import router as monetization_router
@@ -60,6 +61,7 @@ app.include_router(weather_router)
 app.include_router(plant_health_router)
 app.include_router(monetization_router)
 app.include_router(feedback_router)
+app.include_router(dashboard_router)
 
 
 @app.on_event("startup")

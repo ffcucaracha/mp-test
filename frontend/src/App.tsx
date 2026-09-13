@@ -113,7 +113,7 @@ function AgroConnectApp() {
           <Route path="/today" element={<DashboardPage currentUser={currentUser} />} />
           <Route path="/feed" element={<FeedPage currentUser={currentUser} />} />
           <Route path="/fields" element={<FieldsPage user={currentUser} />} />
-          <Route path="/neighbors" element={<NeighborsPage currentUser={currentUser} users={users} />} />
+          <Route path="/neighbors" element={<NeighborsPage currentUser={currentUser} />} />
           <Route path="/alerts" element={<AlertsPage currentUser={currentUser} />} />
           <Route path="/profile" element={<ProfilePage user={currentUser} onSaved={replaceUser} onLogout={logout} />} />
           <Route path="*" element={<Navigate to="/today" replace />} />
