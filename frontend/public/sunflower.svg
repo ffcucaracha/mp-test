@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Подсолнух AgroConnect">
+  <rect width="512" height="512" rx="112" fill="#1d6b3a"/>
+  <g fill="#f6bf2f">
+    <ellipse cx="256" cy="104" rx="47" ry="108"/><ellipse cx="256" cy="408" rx="47" ry="108"/><ellipse cx="104" cy="256" rx="108" ry="47"/><ellipse cx="408" cy="256" rx="108" ry="47"/>
+    <ellipse cx="149" cy="149" rx="47" ry="108" transform="rotate(-45 149 149)"/><ellipse cx="363" cy="149" rx="47" ry="108" transform="rotate(45 363 149)"/><ellipse cx="149" cy="363" rx="47" ry="108" transform="rotate(45 149 363)"/><ellipse cx="363" cy="363" rx="47" ry="108" transform="rotate(-45 363 363)"/>
+  </g>
+  <circle cx="256" cy="256" r="112" fill="#563a1f"/><circle cx="256" cy="256" r="78" fill="#754b24"/>
+  <g fill="#3e291b"><circle cx="222" cy="218" r="10"/><circle cx="260" cy="205" r="10"/><circle cx="294" cy="224" r="10"/><circle cx="210" cy="259" r="10"/><circle cx="251" cy="255" r="10"/><circle cx="299" cy="268" r="10"/><circle cx="227" cy="298" r="10"/><circle cx="272" cy="305" r="10"/></g>
+</svg>
