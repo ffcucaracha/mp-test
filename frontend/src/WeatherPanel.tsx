@@ -7,7 +7,8 @@ import type { AgroField, FieldWeather, User } from './types'
 const WEATHER_REFRESH_MS = 3 * 60 * 60 * 1000
 const WEATHER_MAX_AGE_MS = 72 * 60 * 60 * 1000
 
-function formatTemperature(value: number) {
+function formatTemperature(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—'
   return `${value > 0 ? '+' : ''}${value.toFixed(1)} °C`
 }
 
@@ -97,9 +98,9 @@ export function WeatherPanel({ field, user }: { field: AgroField; user: User }) 
       {weather && (
         <>
           <div className="weather-stats">
-            <div><span>Температура</span><strong>{weather.current_temperature_c === null ? '—' : formatTemperature(weather.current_temperature_c)}</strong></div>
-            <div><span>Осадки</span><strong>{weather.current_precipitation_mm === null ? '—' : `${weather.current_precipitation_mm} мм`}</strong></div>
-            <div><span>Ветер</span><strong>{weather.current_wind_speed_kmh === null ? '—' : `${weather.current_wind_speed_kmh} км/ч`}</strong></div>
+            <div><span>Температура</span><strong>{formatTemperature(weather.current_temperature_c ?? weather.hours?.[0]?.temperature_c)}</strong></div>
+            <div><span>Осадки</span><strong>{weather.current_precipitation_mm === null || weather.current_precipitation_mm === undefined ? '—' : `${weather.current_precipitation_mm} мм`}</strong></div>
+            <div><span>Ветер</span><strong>{weather.current_wind_speed_kmh === null || weather.current_wind_speed_kmh === undefined ? '—' : `${weather.current_wind_speed_kmh} км/ч`}</strong></div>
           </div>
           <button type="button" className="weather-forecast-button" onClick={() => setForecastOpen(true)}>Прогноз на 72 часа</button>
 
