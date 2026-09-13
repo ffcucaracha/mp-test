@@ -217,13 +217,6 @@ async function reconcileNativeCompletions() {
 
 export async function syncOutbox(): Promise<{ synced: number; pending: number }> {
   const reconciled = await reconcileNativeCompletions()
-  if (Capacitor.isNativePlatform()) {
-    const items = await getOutbox()
-    for (const item of items) await mirrorNative(item)
-    const pending = await getOutboxCount()
-    if (reconciled > 0) window.dispatchEvent(new Event('agroconnect:sync-complete'))
-    return { synced: reconciled, pending }
-  }
   if (!navigator.onLine) return { synced: reconciled, pending: await getOutboxCount() }
   const items = await getOutbox()
   let synced = reconciled
