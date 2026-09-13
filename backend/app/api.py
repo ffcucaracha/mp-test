@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .analytics import track
 from .database import get_db
-from .models import Comment, FarmAccessRequest, Field, Neighbor, Post, ProductEvent, Reaction, User
+from .models import Comment, FarmAccessRequest, Field, Neighbor, Post, ProductEvent, Reaction, User, WeatherStation
 from .schemas import (
     CommentCreate,
     CommentOut,
@@ -214,6 +214,14 @@ def create_field(user_id: int, payload: FieldCreate, db: Session = Depends(get_d
     owner = _get_user_or_404(db, user_id)
     values = payload.model_dump()
     values["privacy_variant"] = owner.field_access_mode
+    stations = list(db.scalars(select(WeatherStation)).all())
+    if stations:
+        nearest = min(stations, key=lambda station: _distance_km(payload.latitude, payload.longitude, station.latitude, station.longitude))
+        distance = _distance_km(payload.latitude, payload.longitude, nearest.latitude, nearest.longitude)
+        # Observations farther than 30 km are too coarse for a field-level weather signal.
+        if distance <= 30:
+            values["weather_station_id"] = nearest.id
+            values["weather_station_distance_km"] = round(distance, 1)
     field = Field(owner_id=user_id, **values)
     db.add(field)
     db.commit()

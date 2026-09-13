@@ -50,12 +50,28 @@ class Field(Base):
     area_ha: Mapped[float | None] = mapped_column(Float, nullable=True)
     geometry: Mapped[dict] = mapped_column(JSON, nullable=False)
     privacy_variant: Mapped[str] = mapped_column(String(1), default="A")
+    weather_station_id: Mapped[int | None] = mapped_column(ForeignKey("weather_stations.id", ondelete="SET NULL"), nullable=True, index=True)
+    weather_station_distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     owner: Mapped[User] = relationship(back_populates="fields")
     posts: Mapped[list["Post"]] = relationship(back_populates="field", cascade="all, delete-orphan")
     crop_seasons: Mapped[list["CropSeason"]] = relationship(back_populates="field", cascade="all, delete-orphan")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="field")
+    weather_station: Mapped["WeatherStation | None"] = relationship(back_populates="fields")
+
+
+class WeatherStation(Base):
+    __tablename__ = "weather_stations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    external_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(180), default="")
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    source_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+    fields: Mapped[list["Field"]] = relationship(back_populates="weather_station")
 
 
 class CropSeason(Base):

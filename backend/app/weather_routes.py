@@ -7,10 +7,21 @@ from sqlalchemy.orm import Session
 
 from .analytics import track
 from .database import get_db
-from .models import Alert, AlertRecipient, Field, User
+from .company_weather import sync_company_weather_stations
+from .models import Alert, AlertRecipient, Field, User, WeatherStation
 from .weather import WeatherProviderError, get_weather_provider
 
 router = APIRouter(tags=["Alerts"])
+
+
+@router.post("/api/internal/weather-stations/sync", tags=["Product"], summary="Однократно импортировать метеостанции компании")
+def sync_weather_stations(db: Session = Depends(get_db)) -> dict:
+    """Manual MVP import. Uses only `/devices`, never company field endpoints."""
+    try:
+        count = sync_company_weather_stations(db)
+    except WeatherProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"imported": count, "stations_total": db.query(WeatherStation).count(), "maximum_assignment_distance_km": 30}
 
 
 class WeatherCheck(BaseModel):

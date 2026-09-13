@@ -194,6 +194,24 @@ uvicorn app.main:app --reload
 
 PostgreSQL при этом нужно запустить отдельно.
 
+## Метеостанции компании
+
+AgroConnect хранит перечень доступных метеостанций в своей БД. Один раз заполните локальный `.env` (не добавляйте его в Git):
+
+```dotenv
+COMPANY_API_URL=https://api.company.example
+COMPANY_API_EMAIL=ваш_email
+COMPANY_API_PASSWORD=ваш_пароль
+```
+
+После запуска backend выполните однократный импорт:
+
+```bash
+curl -X POST http://localhost:8000/api/internal/weather-stations/sync
+```
+
+Импорт использует только `POST /api/auth/login` и `GET /api/weather-sensor/api/devices`. При создании поля оно привязывается к ближайшей станции, если та находится не дальше **30 км**; иначе прогноз и предупреждения продолжают работать через Open-Meteo. Маршруты компании по `/fields/...` намеренно не вызываются.
+
 ### Frontend
 
 ```bash

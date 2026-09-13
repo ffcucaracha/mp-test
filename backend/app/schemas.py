@@ -69,6 +69,8 @@ class FieldOut(FieldCreate):
     id: int
     owner_id: int
     created_at: datetime
+    weather_station_id: int | None = None
+    weather_station_distance_km: float | None = None
 
 
 class FieldPrivacyUpdate(BaseModel):
