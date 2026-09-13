@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .analytics import track
 from .database import get_db
-from .company_weather import sync_company_weather_stations
+from .company_weather import MAX_STATION_DISTANCE_KM, latest_company_weather, sync_company_weather_stations
 from .models import Alert, AlertRecipient, Field, User, WeatherStation
 from .weather import WeatherProviderError, get_weather_provider
 
@@ -21,7 +21,9 @@ def sync_weather_stations(db: Session = Depends(get_db)) -> dict:
         count = sync_company_weather_stations(db)
     except WeatherProviderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"imported": count, "stations_total": db.query(WeatherStation).count(), "maximum_assignment_distance_km": 30}
+    _assign_nearest_stations(db)
+    db.commit()
+    return {"imported": count, "stations_total": db.query(WeatherStation).count(), "maximum_assignment_distance_km": MAX_STATION_DISTANCE_KM}
 
 
 class WeatherCheck(BaseModel):
@@ -52,7 +54,34 @@ class FieldWeatherOut(BaseModel):
     max_wind_speed_kmh: float | None
     alert_id: int | None
     alert_created: bool
+    current_source: str
+    current_station_name: str | None
+    current_station_distance_km: float | None
+    current_observed_at: datetime | None
+    current_temperature_c: float | None
+    current_apparent_temperature_c: float | None
+    current_wind_speed_kmh: float | None
+    current_wind_gust_kmh: float | None
+    current_precipitation_mm: float | None
     hours: list[WeatherHourOut]
+
+
+def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    from math import asin, cos, radians, sin, sqrt
+    a = sin(radians(lat2 - lat1) / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371 * asin(sqrt(a))
+
+
+def _assign_nearest_stations(db: Session) -> None:
+    stations = list(db.scalars(select(WeatherStation)).all())
+    for field in db.scalars(select(Field)).all():
+        if not stations:
+            field.weather_station_id = field.weather_station_distance_km = None
+            continue
+        station = min(stations, key=lambda x: _distance_km(field.latitude, field.longitude, x.latitude, x.longitude))
+        distance = _distance_km(field.latitude, field.longitude, station.latitude, station.longitude)
+        field.weather_station_id = station.id if distance <= MAX_STATION_DISTANCE_KM else None
+        field.weather_station_distance_km = round(distance, 1) if distance <= MAX_STATION_DISTANCE_KM else None
 
 
 def _get_user(db: Session, user_id: int) -> User:
@@ -89,6 +118,14 @@ def check_field_weather(field_id: int, payload: WeatherCheck, db: Session = Depe
 
     if not forecast.hours:
         raise HTTPException(status_code=502, detail="Weather provider returned an empty forecast")
+
+    current = None
+    if field.weather_station:
+        try:
+            current = latest_company_weather(field.weather_station.external_id)
+        except WeatherProviderError:
+            # Forecast must remain available if one station is temporarily offline.
+            current = None
 
     min_temperature = min(row.temperature_c for row in forecast.hours)
     precipitation_values = [row.precipitation_probability for row in forecast.hours if row.precipitation_probability is not None]
@@ -214,6 +251,15 @@ def check_field_weather(field_id: int, payload: WeatherCheck, db: Session = Depe
         max_wind_speed_kmh=round(max(wind_values), 1) if wind_values else None,
         alert_id=alert_id,
         alert_created=alert_created,
+        current_source="company_station" if current else "open_meteo",
+        current_station_name=field.weather_station.name if current and field.weather_station else None,
+        current_station_distance_km=field.weather_station_distance_km if current else None,
+        current_observed_at=datetime.fromisoformat(current["observed_at"].replace("Z", "+00:00")) if current else None,
+        current_temperature_c=current["temperature_c"] if current else forecast.hours[0].temperature_c,
+        current_apparent_temperature_c=current["apparent_temperature_c"] if current else forecast.hours[0].apparent_temperature_c,
+        current_wind_speed_kmh=current["wind_speed_kmh"] if current else forecast.hours[0].wind_speed_kmh,
+        current_wind_gust_kmh=current["wind_gust_kmh"] if current else None,
+        current_precipitation_mm=current["precipitation_mm"] if current else None,
         hours=[
             WeatherHourOut(
                 time=row.time,
@@ -222,6 +268,6 @@ def check_field_weather(field_id: int, payload: WeatherCheck, db: Session = Depe
                 precipitation_probability=row.precipitation_probability,
                 wind_speed_kmh=row.wind_speed_kmh,
             )
-            for row in forecast.hours[:24]
+            for row in forecast.hours[:payload.hours]
         ],
     )
