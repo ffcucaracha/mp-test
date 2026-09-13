@@ -17,6 +17,8 @@
 .weather-hours { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 16px; }
 .weather-hours > div { display: grid; gap: 4px; padding: 9px; border-radius: 10px; background: #f4f7f2; font-size: 12px; }
 .weather-hours time { color: #607060; }
+.neighbor-name-search { display: flex; gap: 8px; margin-top: 12px; }
+.neighbor-name-search input { min-width: 0; flex: 1; }
 
 .weather-panel-heading {
   display: flex;
