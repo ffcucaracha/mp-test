@@ -9,6 +9,9 @@ const ACCESS_MESSAGE = 'Хочу посмотреть все поля хозяй
 export function NeighborsPage({ currentUser }: { currentUser: User }) {
   const [neighbors, setNeighbors] = useState<NeighborLink[]>([])
   const [nearby, setNearby] = useState<NearbyFarmer[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<User[]>([])
+  const [searching, setSearching] = useState(false)
   const [incoming, setIncoming] = useState<FarmAccessRequest[]>([])
   const [radiusKm, setRadiusKm] = useState(100)
   const [selected, setSelected] = useState<NeighborLink | null>(null)
@@ -44,6 +47,15 @@ export function NeighborsPage({ currentUser }: { currentUser: User }) {
     try { await api.addNeighbor(currentUser.id, user.id); await load() } catch (err) { setError(err instanceof Error ? err.message : 'Не удалось добавить соседа') } finally { setBusyKey('') }
   }
 
+  async function searchNeighbors() {
+    const query = searchQuery.trim()
+    if (query.length < 2) return
+    setSearching(true); setError('')
+    try { setSearchResults(await api.searchNeighbors(currentUser.id, query)) }
+    catch (err) { setError(err instanceof Error ? err.message : 'Не удалось выполнить поиск') }
+    finally { setSearching(false) }
+  }
+
   async function removeNeighbor(user: User) {
     setBusyKey(`remove-${user.id}`)
     try { await api.removeNeighbor(currentUser.id, user.id); setSelected(null); setNeighborFields([]); await load() } catch (err) { setError(err instanceof Error ? err.message : 'Не удалось убрать соседа') } finally { setBusyKey('') }
@@ -73,6 +85,13 @@ export function NeighborsPage({ currentUser }: { currentUser: User }) {
     <section className="neighbor-search-card nearby-farmers-card">
       <div className="nearby-heading"><div><h2>Рядом с вами</h2><p className="muted">Хозяйства, у которых хотя бы одно поле попадает в выбранный радиус от ваших полей.</p></div><label className="nearby-radius"><span>Радиус</span><select value={radiusKm} onChange={(event) => setRadiusKm(Number(event.target.value))}>{RADII.map((radius) => <option key={radius} value={radius}>{radius} км</option>)}</select></label></div>
       {loading ? <p className="muted">Ищем хозяйства рядом…</p> : nearby.length === 0 ? <div className="neighbor-empty">В этом радиусе новых хозяйств нет.</div> : <div className="neighbor-search-results">{nearby.map((farmer) => <article className="neighbor-card searchable" key={farmer.user.id}><div className="neighbor-main"><strong>{farmer.user.name}</strong><small>{farmer.user.farm_name || `@${farmer.user.username}`} · {farmer.user.specialization}</small><small>{farmer.fields_count} полей · {formatArea(farmer.total_area_ha)} · ближайшее поле в {formatDistance(farmer.nearest_field_distance_km)}</small></div><button className="primary-button compact-button" type="button" disabled={busyKey === `add-${farmer.user.id}`} onClick={() => void addNeighbor(farmer.user)}>{busyKey === `add-${farmer.user.id}` ? 'Добавляем…' : '+ Сосед'}</button></article>)}</div>}
+    </section>
+
+    <section className="neighbor-search-card">
+      <div className="nearby-heading"><div><h2>Найти фермера</h2><p className="muted">По фамилии, имени или @нику — независимо от расстояния.</p></div></div>
+      <form className="neighbor-name-search" onSubmit={(event) => { event.preventDefault(); void searchNeighbors() }}><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Например, Иванова или @anna_farm" minLength={2} /><button className="secondary-button compact-button" type="submit" disabled={searching || searchQuery.trim().length < 2}>{searching ? 'Ищем…' : 'Найти'}</button></form>
+      {searchResults.length > 0 && <div className="neighbor-search-results">{searchResults.filter((user) => !neighbors.some((item) => item.user.id === user.id)).map((user) => <article className="neighbor-card searchable" key={user.id}><div className="neighbor-main"><strong>{user.name}</strong><small>@{user.username} · {user.region}</small><small>{user.farm_name || user.specialization}</small></div><button className="primary-button compact-button" type="button" disabled={busyKey === `add-${user.id}`} onClick={() => void addNeighbor(user)}>{busyKey === `add-${user.id}` ? 'Добавляем…' : '+ Сосед'}</button></article>)}</div>}
+      {searchQuery.trim().length >= 2 && !searching && searchResults.length === 0 && <div className="neighbor-empty">Ничего не найдено.</div>}
     </section>
 
     <section className="neighbors-current-section">
