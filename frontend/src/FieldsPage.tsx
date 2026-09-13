@@ -39,6 +39,7 @@ export function FieldsPage({ user }: { user: User }) {
   const [pendingFields, setPendingFields] = useState<LocalFieldDraft[]>([])
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER)
   const [form, setForm] = useState<FieldCreate>(() => emptyField())
+  const [formOpen, setFormOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -60,9 +61,7 @@ export function FieldsPage({ user }: { user: User }) {
       const [serverFields, localFields] = await Promise.all([api.fields(user.id), getLocalFieldDrafts(user.id)])
       setFields(serverFields)
       setPendingFields(localFields)
-      if (serverFields.length > 0) {
-        setMapCenter({ latitude: serverFields[0].latitude, longitude: serverFields[0].longitude })
-      }
+      if (serverFields.length > 0) setMapCenter({ latitude: serverFields[0].latitude, longitude: serverFields[0].longitude })
     } catch (error) {
       try { setPendingFields(await getLocalFieldDrafts(user.id)) } catch { /* keep current drafts */ }
       setMessage(error instanceof Error ? error.message : 'Не удалось загрузить поля')
@@ -80,6 +79,7 @@ export function FieldsPage({ user }: { user: User }) {
 
   function resetForm() {
     setForm(emptyField(mapCenter))
+    setFormOpen(false)
   }
 
   function changeGeometry(geometry: GeoJsonPolygon | null) {
@@ -94,13 +94,7 @@ export function FieldsPage({ user }: { user: User }) {
     }
     const centroid = polygonCentroid(geometry)
     const area = polygonAreaHa(geometry)
-    setForm((current) => ({
-      ...current,
-      geometry,
-      latitude: centroid.latitude,
-      longitude: centroid.longitude,
-      area_ha: area,
-    }))
+    setForm((current) => ({ ...current, geometry, latitude: centroid.latitude, longitude: centroid.longitude, area_ha: area }))
   }
 
   async function saveOfflineField() {
@@ -114,20 +108,14 @@ export function FieldsPage({ user }: { user: User }) {
       geometry: form.geometry,
     })
     try {
-      await enqueueMutation(
-        `/api/users/${user.id}/fields`,
-        'POST',
-        form,
-        `Новое поле: ${form.name}`,
-        { kind: 'field_create', localRef: local.local_ref },
-      )
+      await enqueueMutation(`/api/users/${user.id}/fields`, 'POST', form, `Новое поле: ${form.name}`, { kind: 'field_create', localRef: local.local_ref })
     } catch (error) {
       await removeLocalFieldDraft(local.local_ref).catch(() => undefined)
       throw error
     }
     setPendingFields(await getLocalFieldDrafts(user.id))
     resetForm()
-    setMessage(`Поле «${local.payload.name}» сохранено локально. После синхронизации оно получит серверный ID.`)
+    setMessage(`Поле «${local.payload.name}» сохранено локально. После синхронизации оно появится в хозяйстве.`)
   }
 
   async function submit(event: FormEvent) {
@@ -180,44 +168,40 @@ export function FieldsPage({ user }: { user: User }) {
 
   return (
     <section className="fields-stage">
-      <div className="section-heading"><div><span className="eyebrow">Рабочий дневник</span><h1>Мои поля</h1><p>Границы полей хранятся как полигоны; по ним автоматически считаются центр и площадь.</p></div></div>
+      <div className="section-heading fields-heading">
+        <div><span className="eyebrow">Рабочий дневник</span><h1>Мои поля</h1></div>
+        <button type="button" className={formOpen ? 'secondary-button' : 'primary-button'} onClick={() => setFormOpen((value) => !value)}>
+          {formOpen ? 'Закрыть' : '+ Добавить поле'}
+        </button>
+      </div>
 
       {fields.length > 0 && (
         <section className="form-card farm-fields-map-card">
-          <div className="field-card-heading">
-            <div><h2>Карта моих полей</h2><p>{fields.length} полей · контуры хозяйства</p></div>
-          </div>
-          <OfflineMap
-            latitude={farmMapCenter.latitude}
-            longitude={farmMapCenter.longitude}
-            zoom={11}
-            polygons={fields.map((field) => ({ geometry: field.geometry, label: field.name }))}
-          />
+          <div className="field-card-heading"><div><h2>Карта моих полей</h2><p>{fields.length} полей · контуры хозяйства</p></div></div>
+          <OfflineMap latitude={farmMapCenter.latitude} longitude={farmMapCenter.longitude} zoom={11} polygons={fields.map((field) => ({ geometry: field.geometry, label: field.name }))} />
         </section>
       )}
 
-      <form className="form-card field-form" onSubmit={submit}>
-        <h2>Добавить поле</h2>
-        <div className="two-columns">
-          <FormField label="Название"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField>
-          <FormField label="Культура"><input required value={form.crop} onChange={(e) => setForm({ ...form, crop: e.target.value })} /></FormField>
-        </div>
-        <button type="button" className="secondary-button" onClick={useGeolocation}>⌖ Переместить карту к моей геопозиции</button>
-        <FieldPolygonEditor
-          centerLatitude={mapCenter.latitude}
-          centerLongitude={mapCenter.longitude}
-          geometry={form.geometry}
-          onChange={changeGeometry}
-        />
-        <div className="field-geometry-summary">
-          <span><strong>{polygonPoints.length}</strong> вершин</span>
-          <span><strong>{form.area_ha ?? '—'}</strong> га</span>
-          {polygonPoints.length >= 3 && <span>центр {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}</span>}
-        </div>
-        <p className="muted">Площадь рассчитывается автоматически по нарисованному контуру. Отдельно вводить координаты и гектары не нужно.</p>
-        <button className="primary-button" type="submit" disabled={saving || !canSave}>{saving ? 'Сохраняем…' : navigator.onLine ? 'Добавить поле' : 'Сохранить поле офлайн'}</button>
-        {message && <p className="form-message">{message}</p>}
-      </form>
+      {formOpen && (
+        <form className="form-card field-form" onSubmit={submit}>
+          <h2>Добавить поле</h2>
+          <div className="two-columns">
+            <FormField label="Название"><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></FormField>
+            <FormField label="Культура"><input required value={form.crop} onChange={(e) => setForm({ ...form, crop: e.target.value })} /></FormField>
+          </div>
+          <button type="button" className="secondary-button" onClick={useGeolocation}>⌖ Переместить карту к моей геопозиции</button>
+          <FieldPolygonEditor centerLatitude={mapCenter.latitude} centerLongitude={mapCenter.longitude} geometry={form.geometry} onChange={changeGeometry} />
+          <div className="field-geometry-summary">
+            <span><strong>{polygonPoints.length}</strong> вершин</span>
+            <span><strong>{form.area_ha ?? '—'}</strong> га</span>
+            {polygonPoints.length >= 3 && <span>центр {form.latitude.toFixed(5)}, {form.longitude.toFixed(5)}</span>}
+          </div>
+          <p className="muted">Площадь рассчитывается автоматически по нарисованному контуру.</p>
+          <button className="primary-button" type="submit" disabled={saving || !canSave}>{saving ? 'Сохраняем…' : navigator.onLine ? 'Добавить поле' : 'Сохранить поле офлайн'}</button>
+        </form>
+      )}
+
+      {message && <p className="form-message fields-message">{message}</p>}
 
       {pendingFields.length > 0 && (
         <div className="field-list">
@@ -228,7 +212,6 @@ export function FieldsPage({ user }: { user: User }) {
                 <span className="privacy-chip">Ждёт синхронизации</span>
               </div>
               <OfflineMap latitude={draft.payload.latitude} longitude={draft.payload.longitude} polygon={draft.payload.geometry} compact />
-              <p className="muted">Контур сохранён локально. Погода, севооборот и приватность станут доступны после получения серверного ID.</p>
             </article>
           ))}
         </div>
