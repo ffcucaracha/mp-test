@@ -23,23 +23,17 @@ export function GamificationCard({ user }: { user: User }) {
   return (
     <section className="gamification-card">
       <div className="gamification-heading">
-        <div>
-          <h2>Активность хозяйства</h2>
-          <p>Только фактические показатели — без уровней и бейджей.</p>
-        </div>
+        <h2>Активность хозяйства</h2>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
       {!metrics && !error ? <p className="muted">Считаем показатели…</p> : metrics && (
-        <>
-          <div className="gamification-grid">
-            <div className="gamification-metric"><strong>{metrics.profile_completeness}%</strong><span>Профиль</span></div>
-            <div className="gamification-metric"><strong>{metrics.neighbors}</strong><span>Соседи</span></div>
-            <div className="gamification-metric"><strong>{weeksLabel(metrics.weekly_activity_streak)}</strong><span>Серия активности</span></div>
-            <div className="gamification-metric"><strong>{metrics.reputation > 0 ? '+' : ''}{metrics.reputation}</strong><span>Репутация</span></div>
-          </div>
-          <p className="gamification-note">Репутация — сумма реакций 🌾 (+1) и 🥀 (−1) на ваши публикации. Серия — число последовательных недель с полезной активностью в AgroConnect.</p>
-        </>
+        <div className="gamification-grid">
+          <div className="gamification-metric"><strong>{metrics.profile_completeness}%</strong><span>Профиль</span></div>
+          <div className="gamification-metric"><strong>{metrics.neighbors}</strong><span>Соседи</span></div>
+          <div className="gamification-metric"><strong>{weeksLabel(metrics.weekly_activity_streak)}</strong><span>Серия активности</span></div>
+          <div className="gamification-metric"><strong>{metrics.reputation > 0 ? '+' : ''}{metrics.reputation}</strong><span>Репутация</span></div>
+        </div>
       )}
     </section>
   )
