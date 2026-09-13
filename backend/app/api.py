@@ -423,6 +423,18 @@ def list_neighbors(user_id: int, db: Session = Depends(get_db)) -> list[Neighbor
     return [_neighbor_out(db, row) for row in rows]
 
 
+@router.get("/neighbors/search", response_model=list[UserOut], tags=["Neighbors"], summary="Найти фермера по имени или нику")
+def search_neighbors(user_id: int, q: str = Query(min_length=2, max_length=80), db: Session = Depends(get_db)) -> list[UserOut]:
+    _get_user_or_404(db, user_id)
+    needle = f"%{q.strip().removeprefix('@').lower()}%"
+    rows = db.scalars(
+        select(User).where(User.id != user_id).where(
+            func.lower(User.name).like(needle) | func.lower(User.username).like(needle)
+        ).order_by(User.name).limit(20)
+    ).all()
+    return [UserOut.model_validate(row) for row in rows]
+
+
 @router.get("/nearby-farmers", response_model=list[NearbyFarmerOut], tags=["Neighbors"], summary="Найти хозяйства рядом с полями пользователя")
 def nearby_farmers(
     user_id: int,
