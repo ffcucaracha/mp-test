@@ -24,6 +24,7 @@ class UserOut(BaseModel):
     is_beekeeper: bool
     news_radius_km: int
     broadcast_radius_km: int
+    field_access_mode: Literal["A", "B"]
 
 
 class UserUpdate(BaseModel):
@@ -73,6 +74,11 @@ class FieldOut(FieldCreate):
 class FieldPrivacyUpdate(BaseModel):
     owner_id: int
     privacy_variant: Literal["A", "B"]
+
+
+class FarmAccessModeUpdate(BaseModel):
+    owner_id: int
+    field_access_mode: Literal["A", "B"]
 
 
 class PublicFieldOut(BaseModel):

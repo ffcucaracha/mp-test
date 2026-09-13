@@ -96,7 +96,7 @@ export function NeighborsPage({ currentUser }: { currentUser: User }) {
 
 function NeighborFieldCard({ field }: { field: PublicField }) {
   if (!field.details_visible) return <article className="neighbor-field-card is-private"><h4>Доступ закрыт</h4><p>Поле откроется после одобрения.</p></article>
-  return <article className="neighbor-field-card is-open"><h4>{field.name}</h4><p>{field.crop} · {field.area_ha ? formatArea(field.area_ha) : 'площадь не указана'}</p><div className="field-detail-grid"><span><small>Координаты центра</small><strong>{field.latitude?.toFixed(4)}, {field.longitude?.toFixed(4)}</strong></span><span><small>Видимость поля</small><strong>{field.privacy_variant === 'A' ? 'Публично' : 'По разрешению'}</strong></span></div></article>
+  return <article className="neighbor-field-card is-open"><h4>{field.name}</h4><p>{field.crop} · {field.area_ha ? formatArea(field.area_ha) : 'площадь не указана'}</p><div className="field-detail-grid"><span className="wide"><small>Координаты центра</small><strong>{field.latitude?.toFixed(4)}, {field.longitude?.toFixed(4)}</strong></span></div></article>
 }
 
 function formatArea(value: number) { return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(value)} га` }

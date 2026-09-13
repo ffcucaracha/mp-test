@@ -10,7 +10,40 @@ from .product_metrics import router as product_metrics_router
 from .seed import seed_data
 from .weather_routes import router as weather_router
 
-app = FastAPI(title="AgroConnect MVP API", version="0.8.0")
+app = FastAPI(
+    title="AgroConnect MVP API",
+    version="0.9.0",
+    summary="API географической сети взаимопомощи для сельхозпроизводителей.",
+    description="""
+## Назначение
+
+AgroConnect хранит поля и их историю, локальную ленту, соседей, предупреждения и заявки
+на доступ ко всем полям хозяйства.
+
+## Демо-аутентификация
+
+В MVP авторизация упрощена: идентификатор текущего пользователя передаётся как `user_id`
+в query-параметре или теле запроса. В production его должен заменять токен авторизации.
+
+## Приватность хозяйства
+
+Режим доступа применяется **сразу ко всем полям одного владельца**: `A` — открыто,
+`B` — доступ после одобрения владельцем заявки соседа.
+""",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    openapi_tags=[
+        {"name": "System", "description": "Проверка доступности сервиса."},
+        {"name": "Users", "description": "Тестовые пользователи и профиль хозяйства."},
+        {"name": "Fields", "description": "Поля, видимость и севооборот."},
+        {"name": "Feed", "description": "Локальная лента, публикации и реакции."},
+        {"name": "Neighbors", "description": "Поиск хозяйств рядом, соседи и доступ ко всем полям."},
+        {"name": "Alerts", "description": "Пасеки, погодные и технологические предупреждения."},
+        {"name": "Plant health", "description": "Анализ состояния растений и обратная связь."},
+        {"name": "Product", "description": "Метрики, эксперименты и обратная связь MVP."},
+    ],
+)
 
 app.add_middleware(
     CORSMiddleware,

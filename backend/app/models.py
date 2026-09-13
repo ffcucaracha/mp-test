@@ -19,6 +19,7 @@ class User(Base):
     is_beekeeper: Mapped[bool] = mapped_column(Boolean, default=False)
     news_radius_km: Mapped[int] = mapped_column(Integer, default=100)
     broadcast_radius_km: Mapped[int] = mapped_column(Integer, default=100)
+    field_access_mode: Mapped[str] = mapped_column(String(1), default="A")
 
     posts: Mapped[list["Post"]] = relationship(back_populates="author", cascade="all, delete-orphan")
     fields: Mapped[list["Field"]] = relationship(back_populates="owner", cascade="all, delete-orphan")

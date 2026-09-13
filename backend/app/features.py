@@ -34,7 +34,7 @@ from .schemas import (
     UserOut,
 )
 
-router = APIRouter()
+router = APIRouter(tags=["Fields", "Alerts"])
 
 
 def _get_user(db: Session, user_id: int) -> User:
@@ -60,7 +60,7 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def _can_view_field(db: Session, field: Field, viewer_id: int) -> bool:
-    if viewer_id == field.owner_id or field.privacy_variant == "A":
+    if viewer_id == field.owner_id or field.owner.field_access_mode == "A":
         return True
     request = db.scalar(
         select(FarmAccessRequest).where(

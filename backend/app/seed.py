@@ -54,12 +54,17 @@ def seed_data() -> None:
             User(id=5, name="Ольга Лебедева", username="olga_bee", region="Республика Татарстан", specialization="Растениеводство и пчеловодство", farm_name="Лебедевы поля и пасека", bio="Выращиваем культуры и держим пасеку. Нужны своевременные предупреждения об обработках.", is_beekeeper=True, news_radius_km=100, broadcast_radius_km=100),
             User(id=6, name="Павел Орлов", username="orlov_far", region="Республика Татарстан", specialization="Кормовые культуры", farm_name="Орлов Поля", bio="Небольшое удалённое хозяйство с кормовыми культурами — полезно видеть только действительно локальные события.", news_radius_km=50, broadcast_radius_km=100),
         ]
+        for user, field_access_mode in zip(users, ("B", "B", "A", "A", "B", "A"), strict=True):
+            user.field_access_mode = field_access_mode
         db.add_all(users)
         db.flush()
 
         # All 52 real polygons and 2026 crops are taken from the KML supplied for the hackathon.
         # Ownership is grouped geographically, so every user's fields form one compact farm.
-        fields = [Field(rotation="", **item) for item in SEED_FIELDS]
+        fields = [
+            Field(rotation="", **{**item, "privacy_variant": users[item["owner_id"] - 1].field_access_mode})
+            for item in SEED_FIELDS
+        ]
         db.add_all(fields)
         db.flush()
 

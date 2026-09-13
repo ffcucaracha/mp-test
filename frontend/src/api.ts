@@ -114,6 +114,8 @@ export const api = {
     request<AgroField>(`/api/users/${userId}/fields`, { method: 'POST', body: JSON.stringify(payload) }),
   updateFieldPrivacy: (fieldId: number, ownerId: number, privacyVariant: PrivacyVariant) =>
     request<AgroField>(`/api/fields/${fieldId}/privacy`, { method: 'PUT', body: JSON.stringify({ owner_id: ownerId, privacy_variant: privacyVariant }) }),
+  updateFarmAccessMode: (ownerId: number, fieldAccessMode: PrivacyVariant) =>
+    request<AgroField[]>(`/api/users/${ownerId}/field-access-mode`, { method: 'PUT', body: JSON.stringify({ owner_id: ownerId, field_access_mode: fieldAccessMode }) }),
   publicFields: (viewerId: number) => request<PublicField[]>(`/api/public/fields?viewer_id=${viewerId}`),
   cropSeasons: (fieldId: number, viewerId: number) => request<CropSeason[]>(`/api/fields/${fieldId}/crop-seasons?viewer_id=${viewerId}`),
   addCropSeason: (fieldId: number, userId: number, year: number, crop: string) =>

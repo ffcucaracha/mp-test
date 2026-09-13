@@ -14,7 +14,7 @@ from .database import get_db
 from .models import Alert, AlertRecipient, Field, Neighbor, PlantHealthAnalysis, Post, User
 from .plant_health import PlantHealthProviderError, get_plant_health_provider, provider_status
 
-router = APIRouter(prefix="/api/ml", tags=["plant-health"])
+router = APIRouter(prefix="/api/ml", tags=["Plant health"])
 
 
 class AnalyzeRequest(BaseModel):

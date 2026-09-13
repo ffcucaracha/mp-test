@@ -25,7 +25,7 @@ from .models import (
     FarmAccessRequest,
 )
 
-router = APIRouter()
+router = APIRouter(tags=["Product"])
 
 MEANINGFUL_ACTIVITY_EVENTS = {
     "profile_updated",

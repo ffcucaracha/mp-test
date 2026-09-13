@@ -15,7 +15,7 @@ export function Stage4Panel({ user, fields, onFieldChanged }: Props) {
     setBusy(true)
     setError('')
     try {
-      const updated = await Promise.all(fields.map((field) => api.updateFieldPrivacy(field.id, user.id, variant)))
+      const updated = await api.updateFarmAccessMode(user.id, variant)
       updated.forEach(onFieldChanged)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось изменить приватность')

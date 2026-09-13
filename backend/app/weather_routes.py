@@ -10,7 +10,7 @@ from .database import get_db
 from .models import Alert, AlertRecipient, Field, User
 from .weather import WeatherProviderError, get_weather_provider
 
-router = APIRouter()
+router = APIRouter(tags=["Alerts"])
 
 
 class WeatherCheck(BaseModel):

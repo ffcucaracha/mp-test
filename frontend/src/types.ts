@@ -9,9 +9,10 @@ export type User = {
   is_beekeeper: boolean
   news_radius_km: number
   broadcast_radius_km: number
+  field_access_mode: PrivacyVariant
 }
 
-export type UserUpdate = Omit<User, 'id' | 'username'>
+export type UserUpdate = Pick<User, 'name' | 'region' | 'specialization' | 'farm_name' | 'bio' | 'is_beekeeper' | 'news_radius_km' | 'broadcast_radius_km'>
 
 export type FeedbackDiaryIntent = 'yes' | 'probably_yes' | 'probably_no' | 'no'
 export type FeedbackFeature = 'local_events' | 'field_history' | 'alerts' | 'neighbors' | 'plant_analysis'

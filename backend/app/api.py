@@ -13,6 +13,7 @@ from .schemas import (
     FeedPostOut,
     FieldCreate,
     FieldOut,
+    FarmAccessModeUpdate,
     FieldPrivacyUpdate,
     FarmAccessRequestCreate,
     FarmAccessRequestOut,
@@ -71,7 +72,7 @@ def _access_request(db: Session, owner_id: int, requester_id: int | None) -> Far
 def _public_field(db: Session, field: Field, viewer_id: int | None) -> PublicFieldOut:
     request = _access_request(db, field.owner_id, viewer_id)
     request_status = request.status if request else None
-    details_visible = field.privacy_variant == "A" or viewer_id == field.owner_id or request_status == "approved"
+    details_visible = field.owner.field_access_mode == "A" or viewer_id == field.owner_id or request_status == "approved"
 
     return PublicFieldOut(
         id=field.id,
@@ -171,24 +172,24 @@ def _neighbor_out(db: Session, neighbor: Neighbor) -> NeighborOut:
     )
 
 
-@router.get("/health")
+@router.get("/health", tags=["System"], summary="Проверить доступность API")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "agroconnect-api"}
 
 
-@router.get("/users", response_model=list[UserOut])
+@router.get("/users", response_model=list[UserOut], tags=["Users"], summary="Получить тестовых пользователей")
 def list_users(db: Session = Depends(get_db)) -> list[User]:
     return list(db.scalars(select(User).order_by(User.id)).all())
 
 
-@router.get("/users/{user_id}", response_model=UserOut)
+@router.get("/users/{user_id}", response_model=UserOut, tags=["Users"], summary="Получить профиль пользователя")
 def get_user(user_id: int, db: Session = Depends(get_db)) -> User:
     user = _get_user_or_404(db, user_id)
     track("profile_viewed", user_id=user_id)
     return user
 
 
-@router.put("/users/{user_id}", response_model=UserOut)
+@router.put("/users/{user_id}", response_model=UserOut, tags=["Users"], summary="Обновить профиль хозяйства")
 def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)) -> User:
     user = _get_user_or_404(db, user_id)
     for key, value in payload.model_dump().items():
@@ -201,16 +202,18 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     return user
 
 
-@router.get("/users/{user_id}/fields", response_model=list[FieldOut])
+@router.get("/users/{user_id}/fields", response_model=list[FieldOut], tags=["Fields"], summary="Получить поля хозяйства")
 def list_user_fields(user_id: int, db: Session = Depends(get_db)) -> list[Field]:
     _get_user_or_404(db, user_id)
     return list(db.scalars(select(Field).where(Field.owner_id == user_id).order_by(Field.id)).all())
 
 
-@router.post("/users/{user_id}/fields", response_model=FieldOut, status_code=status.HTTP_201_CREATED)
+@router.post("/users/{user_id}/fields", response_model=FieldOut, status_code=status.HTTP_201_CREATED, tags=["Fields"], summary="Добавить поле в хозяйство")
 def create_field(user_id: int, payload: FieldCreate, db: Session = Depends(get_db)) -> Field:
-    _get_user_or_404(db, user_id)
-    field = Field(owner_id=user_id, **payload.model_dump())
+    owner = _get_user_or_404(db, user_id)
+    values = payload.model_dump()
+    values["privacy_variant"] = owner.field_access_mode
+    field = Field(owner_id=user_id, **values)
     db.add(field)
     db.commit()
     db.refresh(field)
@@ -220,26 +223,42 @@ def create_field(user_id: int, payload: FieldCreate, db: Session = Depends(get_d
     return field
 
 
-@router.get("/fields/{field_id}", response_model=FieldOut)
+@router.get("/fields/{field_id}", response_model=FieldOut, tags=["Fields"], summary="Получить собственное поле")
 def get_field(field_id: int, db: Session = Depends(get_db)) -> Field:
     field = _get_field_or_404(db, field_id)
     track("field_opened", user_id=field.owner_id, experiment_variant=field.privacy_variant, properties={"field_id": field.id})
     return field
 
 
-@router.put("/fields/{field_id}/privacy", response_model=FieldOut)
+@router.put("/fields/{field_id}/privacy", response_model=FieldOut, tags=["Fields"], summary="Изменить режим доступа всего хозяйства")
 def update_field_privacy(field_id: int, payload: FieldPrivacyUpdate, db: Session = Depends(get_db)) -> Field:
     field = _get_field_or_404(db, field_id)
     if field.owner_id != payload.owner_id:
         raise HTTPException(status_code=403, detail="Only field owner can change privacy")
-    field.privacy_variant = payload.privacy_variant
+    field.owner.field_access_mode = payload.privacy_variant
+    for owned_field in db.scalars(select(Field).where(Field.owner_id == field.owner_id)).all():
+        owned_field.privacy_variant = payload.privacy_variant
     db.commit()
     db.refresh(field)
     track("field_privacy_changed", user_id=field.owner_id, experiment_variant=field.privacy_variant, properties={"field_id": field.id})
     return field
 
 
-@router.get("/public/fields", response_model=list[PublicFieldOut])
+@router.put("/users/{owner_id}/field-access-mode", response_model=list[FieldOut], tags=["Fields"], summary="Установить единый доступ ко всем полям")
+def update_farm_access_mode(owner_id: int, payload: FarmAccessModeUpdate, db: Session = Depends(get_db)) -> list[Field]:
+    owner = _get_user_or_404(db, owner_id)
+    if owner.id != payload.owner_id:
+        raise HTTPException(status_code=403, detail="Only farm owner can change access mode")
+    owner.field_access_mode = payload.field_access_mode
+    fields = list(db.scalars(select(Field).where(Field.owner_id == owner.id).order_by(Field.id)).all())
+    for field in fields:
+        field.privacy_variant = payload.field_access_mode
+    db.commit()
+    track("farm_access_mode_changed", user_id=owner.id, experiment_variant=payload.field_access_mode, properties={"fields": len(fields)})
+    return fields
+
+
+@router.get("/public/fields", response_model=list[PublicFieldOut], tags=["Fields"], summary="Получить поля с учётом доступа зрителя")
 def list_public_fields(viewer_id: int | None = None, db: Session = Depends(get_db)) -> list[PublicFieldOut]:
     if viewer_id is not None:
         _get_user_or_404(db, viewer_id)
@@ -258,7 +277,7 @@ def get_public_field(field_id: int, viewer_id: int | None = None, db: Session = 
     return result
 
 
-@router.post("/neighbors/{owner_id}/access-requests", response_model=FarmAccessRequestOut, status_code=status.HTTP_201_CREATED)
+@router.post("/neighbors/{owner_id}/access-requests", response_model=FarmAccessRequestOut, status_code=status.HTTP_201_CREATED, tags=["Neighbors"], summary="Запросить доступ ко всем полям соседа")
 def create_farm_access_request(owner_id: int, payload: FarmAccessRequestCreate, db: Session = Depends(get_db)) -> FarmAccessRequestOut:
     owner = _get_user_or_404(db, owner_id)
     requester = _get_user_or_404(db, payload.requester_id)
@@ -284,7 +303,7 @@ def create_farm_access_request(owner_id: int, payload: FarmAccessRequestCreate, 
     return _farm_access_request_out(db, request)
 
 
-@router.get("/users/{owner_id}/access-requests/incoming", response_model=list[FarmAccessRequestOut])
+@router.get("/users/{owner_id}/access-requests/incoming", response_model=list[FarmAccessRequestOut], tags=["Neighbors"], summary="Получить входящие заявки доступа")
 def incoming_farm_access_requests(owner_id: int, db: Session = Depends(get_db)) -> list[FarmAccessRequestOut]:
     _get_user_or_404(db, owner_id)
     rows = list(db.scalars(select(FarmAccessRequest).where(FarmAccessRequest.owner_id == owner_id).order_by(FarmAccessRequest.created_at.desc(), FarmAccessRequest.id.desc())).all())
@@ -298,7 +317,7 @@ def outgoing_farm_access_requests(requester_id: int, db: Session = Depends(get_d
     return [_farm_access_request_out(db, row) for row in rows]
 
 
-@router.put("/access-requests/{request_id}", response_model=FarmAccessRequestOut)
+@router.put("/access-requests/{request_id}", response_model=FarmAccessRequestOut, tags=["Neighbors"], summary="Одобрить или отклонить заявку доступа")
 def update_farm_access_request(request_id: int, payload: FarmAccessRequestStatusUpdate, db: Session = Depends(get_db)) -> FarmAccessRequestOut:
     request = db.get(FarmAccessRequest, request_id)
     if not request:
@@ -312,7 +331,7 @@ def update_farm_access_request(request_id: int, payload: FarmAccessRequestStatus
     return _farm_access_request_out(db, request)
 
 
-@router.post("/posts", response_model=FeedPostOut, status_code=status.HTTP_201_CREATED)
+@router.post("/posts", response_model=FeedPostOut, status_code=status.HTTP_201_CREATED, tags=["Feed"], summary="Опубликовать запись с поля")
 def create_post(payload: PostCreate, db: Session = Depends(get_db)) -> FeedPostOut:
     author = _get_user_or_404(db, payload.author_id)
     field = _get_field_or_404(db, payload.field_id)
@@ -328,7 +347,7 @@ def create_post(payload: PostCreate, db: Session = Depends(get_db)) -> FeedPostO
     return _feed_post(post, author, field)
 
 
-@router.get("/feed", response_model=list[FeedPostOut])
+@router.get("/feed", response_model=list[FeedPostOut], tags=["Feed"], summary="Получить локальную ленту и посты соседей")
 def feed(viewer_id: int, db: Session = Depends(get_db)) -> list[FeedPostOut]:
     viewer = _get_user_or_404(db, viewer_id)
     viewer_field = db.scalar(select(Field).where(Field.owner_id == viewer.id).order_by(Field.id))
@@ -384,14 +403,14 @@ def create_comment(post_id: int, payload: CommentCreate, db: Session = Depends(g
     return _feed_post(post, author, viewer_field)
 
 
-@router.get("/neighbors", response_model=list[NeighborOut])
+@router.get("/neighbors", response_model=list[NeighborOut], tags=["Neighbors"], summary="Получить добавленных соседей")
 def list_neighbors(user_id: int, db: Session = Depends(get_db)) -> list[NeighborOut]:
     _get_user_or_404(db, user_id)
     rows = list(db.scalars(select(Neighbor).where(Neighbor.user_id == user_id).order_by(Neighbor.created_at.desc(), Neighbor.id.desc())).all())
     return [_neighbor_out(db, row) for row in rows]
 
 
-@router.get("/nearby-farmers", response_model=list[NearbyFarmerOut])
+@router.get("/nearby-farmers", response_model=list[NearbyFarmerOut], tags=["Neighbors"], summary="Найти хозяйства рядом с полями пользователя")
 def nearby_farmers(
     user_id: int,
     radius_km: int = Query(50, ge=50, le=1000),
@@ -428,7 +447,7 @@ def nearby_farmers(
     return result
 
 
-@router.post("/neighbors/{neighbor_user_id}", response_model=NeighborOut, status_code=status.HTTP_201_CREATED)
+@router.post("/neighbors/{neighbor_user_id}", response_model=NeighborOut, status_code=status.HTTP_201_CREATED, tags=["Neighbors"], summary="Добавить фермера в соседи")
 def add_neighbor(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> NeighborOut:
     _get_user_or_404(db, user_id)
     _get_user_or_404(db, neighbor_user_id)
@@ -467,7 +486,7 @@ def get_neighbor_profile(neighbor_user_id: int, user_id: int, db: Session = Depe
     return neighbor_user
 
 
-@router.get("/neighbors/{neighbor_user_id}/fields", response_model=list[PublicFieldOut])
+@router.get("/neighbors/{neighbor_user_id}/fields", response_model=list[PublicFieldOut], tags=["Neighbors"], summary="Получить поля добавленного соседа")
 def neighbor_fields(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> list[PublicFieldOut]:
     _get_user_or_404(db, user_id)
     _get_user_or_404(db, neighbor_user_id)

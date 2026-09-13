@@ -14,7 +14,7 @@ from .database import get_db
 from .models import Field, User, UserFeedback
 from .schemas import FeedbackCreate, FeedbackOut
 
-router = APIRouter()
+router = APIRouter(tags=["Product"])
 
 DIARY_LABELS = {
     "yes": "Да",

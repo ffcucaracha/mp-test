@@ -11,7 +11,7 @@ from .analytics import track
 from .database import get_db
 from .models import ProductEvent, User
 
-router = APIRouter(prefix="/api/experiments/monetization", tags=["monetization"])
+router = APIRouter(prefix="/api/experiments/monetization", tags=["Product"])
 
 MonetizationEventName = Literal[
     "premium_teaser_shown",
