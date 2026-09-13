@@ -67,8 +67,8 @@ def _device_list(payload: Any) -> list[dict[str, Any]]:
 def _parse_device(item: dict[str, Any]) -> tuple[str, str, float, float] | None:
     external_id = item.get("id") or item.get("device_id") or item.get("uuid")
     coordinates = item.get("coordinates") or item.get("location") or {}
-    latitude = item.get("latitude", coordinates.get("latitude", coordinates.get("lat")))
-    longitude = item.get("longitude", coordinates.get("longitude", coordinates.get("lng", coordinates.get("lon"))))
+    latitude = item.get("latitude", item.get("lat", coordinates.get("latitude", coordinates.get("lat"))))
+    longitude = item.get("longitude", item.get("lon", coordinates.get("longitude", coordinates.get("lng", coordinates.get("lon")))))
     try:
         return str(external_id), str(item.get("name") or item.get("title") or f"МС {external_id}"), float(latitude), float(longitude)
     except (TypeError, ValueError):
