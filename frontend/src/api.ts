@@ -12,7 +12,10 @@ import type {
   FieldWeather,
   GamificationMetrics,
   InternalMetrics,
+  FarmAccessRequest,
+  FarmAccessRequestStatus,
   NeighborLink,
+  NearbyFarmer,
   PlantHealthAnalysis,
   PlantHealthProviderName,
   PlantHealthProviders,
@@ -22,8 +25,6 @@ import type {
   User,
   UserFeedback,
   UserUpdate,
-  VisitRequest,
-  VisitRequestStatus,
 } from './types'
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -119,12 +120,6 @@ export const api = {
     request<CropSeason>(`/api/fields/${fieldId}/crop-seasons`, { method: 'POST', body: JSON.stringify({ user_id: userId, year, crop }) }),
   checkFieldWeather: (fieldId: number, userId: number, frostThresholdC = 0, hours = 72) =>
     request<FieldWeather>(`/api/fields/${fieldId}/weather/check`, { method: 'POST', body: JSON.stringify({ user_id: userId, frost_threshold_c: frostThresholdC, hours }) }),
-  requestVisit: (fieldId: number, requesterId: number, message: string) =>
-    request<VisitRequest>(`/api/fields/${fieldId}/visit-requests`, { method: 'POST', body: JSON.stringify({ requester_id: requesterId, message }) }),
-  incomingVisitRequests: (ownerId: number) => request<VisitRequest[]>(`/api/users/${ownerId}/visit-requests/incoming`),
-  outgoingVisitRequests: (requesterId: number) => request<VisitRequest[]>(`/api/users/${requesterId}/visit-requests/outgoing`),
-  updateVisitRequest: (requestId: number, ownerId: number, requestStatus: Exclude<VisitRequestStatus, 'pending'>) =>
-    request<VisitRequest>(`/api/visit-requests/${requestId}`, { method: 'PUT', body: JSON.stringify({ owner_id: ownerId, status: requestStatus }) }),
   feed: (viewerId: number) => request<FeedPost[]>(`/api/feed?viewer_id=${viewerId}`),
   createPost: (payload: PostCreate) => request<FeedPost>('/api/posts', { method: 'POST', body: JSON.stringify(payload) }),
   setReaction: (postId: number, userId: number, value: -1 | 1) => request<FeedPost>(`/api/posts/${postId}/reaction`, { method: 'PUT', body: JSON.stringify({ user_id: userId, value }) }),
@@ -166,9 +161,16 @@ export const api = {
   }>('/api/experiments/monetization/metrics'),
 
   neighbors: (userId: number) => request<NeighborLink[]>(`/api/neighbors?user_id=${userId}`),
+  nearbyFarmers: (userId: number, radiusKm: number) => request<NearbyFarmer[]>(`/api/nearby-farmers?user_id=${userId}&radius_km=${radiusKm}`),
   addNeighbor: (userId: number, neighborUserId: number) => request<NeighborLink>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'POST' }),
   removeNeighbor: (userId: number, neighborUserId: number) => request<void>(`/api/neighbors/${neighborUserId}?user_id=${userId}`, { method: 'DELETE' }),
-  neighborProfile: (userId: number, neighborUserId: number) => request<User>(`/api/neighbors/${neighborUserId}/profile?user_id=${userId}`),
+  neighborFields: (userId: number, neighborUserId: number) => request<PublicField[]>(`/api/neighbors/${neighborUserId}/fields?user_id=${userId}`),
+  requestFarmAccess: (ownerId: number, requesterId: number, message: string) =>
+    request<FarmAccessRequest>(`/api/neighbors/${ownerId}/access-requests`, { method: 'POST', body: JSON.stringify({ requester_id: requesterId, message }) }),
+  incomingFarmAccessRequests: (ownerId: number) => request<FarmAccessRequest[]>(`/api/users/${ownerId}/access-requests/incoming`),
+  outgoingFarmAccessRequests: (requesterId: number) => request<FarmAccessRequest[]>(`/api/users/${requesterId}/access-requests/outgoing`),
+  updateFarmAccessRequest: (requestId: number, ownerId: number, requestStatus: Exclude<FarmAccessRequestStatus, 'pending'>) =>
+    request<FarmAccessRequest>(`/api/access-requests/${requestId}`, { method: 'PUT', body: JSON.stringify({ owner_id: ownerId, status: requestStatus }) }),
   apiaries: (userId: number) => request<Apiary[]>(`/api/apiaries?user_id=${userId}`),
   createApiary: (payload: ApiaryCreate) => request<Apiary>('/api/apiaries', { method: 'POST', body: JSON.stringify(payload) }),
   alerts: (userId: number) => request<AlertItem[]>(`/api/alerts?user_id=${userId}`),

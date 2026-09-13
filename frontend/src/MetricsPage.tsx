@@ -47,8 +47,8 @@ export function MetricsPage() {
             <span>{metrics.privacy_experiment[variant].fields} полей</span>
             <small>Просмотров открытых: {metrics.privacy_experiment[variant].events.public_field_viewed ?? 0}</small>
             <small>Просмотров скрытых: {metrics.privacy_experiment[variant].events.private_field_viewed ?? 0}</small>
-            <small>Запросов в гости: {metrics.privacy_experiment[variant].events.visit_request_sent ?? 0}</small>
-            <small>Одобрено: {metrics.privacy_experiment[variant].events.visit_request_approved ?? 0}</small>
+            <small>Запросов ко всем полям: {metrics.privacy_experiment[variant].events.farm_access_request_sent ?? 0}</small>
+            <small>Одобрено: {metrics.privacy_experiment[variant].events.farm_access_request_approved ?? 0}</small>
           </article>
         ))}
       </div>

@@ -22,8 +22,11 @@ class User(Base):
 
     posts: Mapped[list["Post"]] = relationship(back_populates="author", cascade="all, delete-orphan")
     fields: Mapped[list["Field"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
-    visit_requests: Mapped[list["VisitRequest"]] = relationship(
-        back_populates="requester", cascade="all, delete-orphan", foreign_keys="VisitRequest.requester_id"
+    access_requests_sent: Mapped[list["FarmAccessRequest"]] = relationship(
+        back_populates="requester", cascade="all, delete-orphan", foreign_keys="FarmAccessRequest.requester_id"
+    )
+    access_requests_received: Mapped[list["FarmAccessRequest"]] = relationship(
+        back_populates="owner", cascade="all, delete-orphan", foreign_keys="FarmAccessRequest.owner_id"
     )
     reactions: Mapped[list["Reaction"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     comments: Mapped[list["Comment"]] = relationship(back_populates="author", cascade="all, delete-orphan")
@@ -49,7 +52,6 @@ class Field(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     owner: Mapped[User] = relationship(back_populates="fields")
-    visit_requests: Mapped[list["VisitRequest"]] = relationship(back_populates="field", cascade="all, delete-orphan")
     posts: Mapped[list["Post"]] = relationship(back_populates="field", cascade="all, delete-orphan")
     crop_seasons: Mapped[list["CropSeason"]] = relationship(back_populates="field", cascade="all, delete-orphan")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="field")
@@ -66,17 +68,17 @@ class CropSeason(Base):
     field: Mapped[Field] = relationship(back_populates="crop_seasons")
 
 
-class VisitRequest(Base):
-    __tablename__ = "visit_requests"
-    __table_args__ = (UniqueConstraint("field_id", "requester_id", name="uq_visit_request_field_requester"),)
+class FarmAccessRequest(Base):
+    __tablename__ = "farm_access_requests"
+    __table_args__ = (UniqueConstraint("owner_id", "requester_id", name="uq_farm_access_request_pair"),)
     id: Mapped[int] = mapped_column(primary_key=True)
-    field_id: Mapped[int] = mapped_column(ForeignKey("fields.id", ondelete="CASCADE"), index=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     requester_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     message: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(16), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    field: Mapped[Field] = relationship(back_populates="visit_requests")
-    requester: Mapped[User] = relationship(back_populates="visit_requests", foreign_keys=[requester_id])
+    owner: Mapped[User] = relationship(back_populates="access_requests_received", foreign_keys=[owner_id])
+    requester: Mapped[User] = relationship(back_populates="access_requests_sent", foreign_keys=[requester_id])
 
 
 class Post(Base):

@@ -43,7 +43,7 @@ export type GamificationMetrics = {
 }
 
 export type PrivacyVariant = 'A' | 'B'
-export type VisitRequestStatus = 'pending' | 'approved' | 'declined'
+export type FarmAccessRequestStatus = 'pending' | 'approved' | 'declined'
 
 export type GeoJsonPolygon = {
   type: 'Polygon'
@@ -95,19 +95,18 @@ export type PublicField = {
   geometry: GeoJsonPolygon | null
   approximate_latitude: number
   approximate_longitude: number
-  visit_request_status: VisitRequestStatus | null
+  access_request_status: FarmAccessRequestStatus | null
 }
 
-export type VisitRequest = {
+export type FarmAccessRequest = {
   id: number
-  field_id: number
-  field_name: string
   owner_id: number
   requester_id: number
   requester_name: string
   requester_username: string
   message: string
-  status: VisitRequestStatus
+  status: FarmAccessRequestStatus
+  fields_count: number
   created_at: string
 }
 
@@ -193,6 +192,16 @@ export type PlantHealthAnalysis = {
 export type NeighborLink = {
   user: User
   created_at: string
+  fields_count: number
+  total_area_ha: number
+  access_request_status: FarmAccessRequestStatus | null
+}
+
+export type NearbyFarmer = {
+  user: User
+  fields_count: number
+  total_area_ha: number
+  nearest_field_distance_km: number
 }
 
 export type Apiary = {

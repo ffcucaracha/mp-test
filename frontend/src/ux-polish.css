@@ -50,6 +50,58 @@
   margin-top: 0;
 }
 
+.nearby-heading,
+.access-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.nearby-heading p,
+.access-callout p {
+  margin-bottom: 0;
+}
+
+.nearby-radius {
+  display: grid;
+  gap: 4px;
+  flex: 0 0 auto;
+  color: #526257;
+  font-size: 13px;
+}
+
+.nearby-radius select {
+  min-height: 40px;
+  border: 1px solid #aebbad;
+  border-radius: 10px;
+  padding: 0 9px;
+  background: #fff;
+  font: inherit;
+}
+
+.access-callout {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid #d8e5d7;
+  border-radius: 13px;
+  background: #f4f9f3;
+}
+
+.access-callout p,
+.access-callout span {
+  color: #526257;
+  font-size: 13px;
+}
+
+.access-callout.granted {
+  display: grid;
+  justify-content: start;
+  gap: 3px;
+  border-color: #b9d8bc;
+  background: #edf8ef;
+}
+
 .neighbor-search-input {
   width: 100%;
   min-height: 48px;
@@ -317,6 +369,16 @@
   }
 
   .neighbor-actions {
+    width: 100%;
+  }
+
+  .nearby-heading,
+  .access-callout {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nearby-radius {
     width: 100%;
   }
 

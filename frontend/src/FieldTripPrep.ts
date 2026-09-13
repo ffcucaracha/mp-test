@@ -42,7 +42,7 @@ export async function prepareFieldTrip(userId: number, onProgress?: (progress: F
   await api.feed(userId); step('Лента рядом сохранена')
   await api.neighbors(userId); step('Соседи сохранены')
   await api.alerts(userId); step('Предупреждения сохранены')
-  await Promise.allSettled([api.incomingVisitRequests(userId), api.outgoingVisitRequests(userId)]); step('Запросы доступа сохранены')
+  await Promise.allSettled([api.incomingFarmAccessRequests(userId), api.outgoingFarmAccessRequests(userId)]); step('Запросы доступа сохранены')
 
   for (const field of fields) {
     await api.cropSeasons(field.id, userId).catch(() => undefined)

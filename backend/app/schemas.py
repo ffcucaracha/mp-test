@@ -92,7 +92,7 @@ class PublicFieldOut(BaseModel):
     geometry: dict | None = None
     approximate_latitude: float
     approximate_longitude: float
-    visit_request_status: Literal["pending", "approved", "declined"] | None = None
+    access_request_status: Literal["pending", "approved", "declined"] | None = None
 
 
 class CropSeasonCreate(BaseModel):
@@ -111,27 +111,41 @@ class CropSeasonOut(BaseModel):
     created_at: datetime
 
 
-class VisitRequestCreate(BaseModel):
+class FarmAccessRequestCreate(BaseModel):
     requester_id: int
     message: str = PydanticField(default="", max_length=500)
 
 
-class VisitRequestStatusUpdate(BaseModel):
+class FarmAccessRequestStatusUpdate(BaseModel):
     owner_id: int
     status: Literal["approved", "declined"]
 
 
-class VisitRequestOut(BaseModel):
+class FarmAccessRequestOut(BaseModel):
     id: int
-    field_id: int
-    field_name: str
     owner_id: int
     requester_id: int
     requester_name: str
     requester_username: str
     message: str
     status: Literal["pending", "approved", "declined"]
+    fields_count: int
     created_at: datetime
+
+
+class NeighborOut(BaseModel):
+    user: UserOut
+    created_at: datetime
+    fields_count: int
+    total_area_ha: float
+    access_request_status: Literal["pending", "approved", "declined"] | None = None
+
+
+class NearbyFarmerOut(BaseModel):
+    user: UserOut
+    fields_count: int
+    total_area_ha: float
+    nearest_field_distance_km: float
 
 
 class CommentCreate(BaseModel):
@@ -179,11 +193,6 @@ class FeedPostOut(BaseModel):
     score: int
     viewer_reaction: Literal[-1, 1] | None
     comments: list[CommentOut]
-
-
-class NeighborOut(BaseModel):
-    user: UserOut
-    created_at: datetime
 
 
 class ApiaryCreate(BaseModel):

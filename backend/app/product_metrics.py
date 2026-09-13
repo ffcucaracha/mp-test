@@ -22,7 +22,7 @@ from .models import (
     ProductEvent,
     Reaction,
     User,
-    VisitRequest,
+    FarmAccessRequest,
 )
 
 router = APIRouter()
@@ -33,9 +33,9 @@ MEANINGFUL_ACTIVITY_EVENTS = {
     "field_created",
     "field_location_added",
     "field_privacy_changed",
-    "visit_request_sent",
-    "visit_request_approved",
-    "visit_request_rejected",
+    "farm_access_request_sent",
+    "farm_access_request_approved",
+    "farm_access_request_rejected",
     "post_created",
     "reaction_added",
     "reaction_changed",
@@ -143,14 +143,10 @@ def _variant_metrics(db: Session, variant: str, all_fields: int) -> dict:
             select(func.count(func.distinct(CropSeason.field_id))).where(CropSeason.field_id.in_(field_ids))
         ) or 0
 
-    visit_requests = db.scalar(
-        select(func.count(VisitRequest.id)).join(Field).where(Field.privacy_variant == variant)
-    ) or 0
-    approvals = db.scalar(
-        select(func.count(VisitRequest.id))
-        .join(Field)
-        .where(Field.privacy_variant == variant, VisitRequest.status == "approved")
-    ) or 0
+    # Access is now granted per farm rather than per individual field. It is
+    # reported once in both privacy variants only for the legacy A/B dashboard.
+    access_requests = db.scalar(select(func.count(FarmAccessRequest.id))) or 0
+    approvals = db.scalar(select(func.count(FarmAccessRequest.id)).where(FarmAccessRequest.status == "approved")) or 0
 
     event_rows = db.execute(
         select(ProductEvent.event_name, func.count(ProductEvent.id))
@@ -164,9 +160,9 @@ def _variant_metrics(db: Session, variant: str, all_fields: int) -> dict:
         "field_creation_rate": _pct(field_count, all_fields),
         "location_completion_rate": _pct(with_location, field_count),
         "crop_rotation_completion_rate": _pct(int(rotations), field_count),
-        "visit_requests": int(visit_requests),
+        "visit_requests": int(access_requests),
         "approvals": int(approvals),
-        "approval_rate": _pct(int(approvals), int(visit_requests)),
+        "approval_rate": _pct(int(approvals), int(access_requests)),
         "detailed_field_views": int(events.get("public_field_viewed", 0)),
         "hidden_field_views": int(events.get("private_field_viewed", 0)),
     }
@@ -292,7 +288,7 @@ def metrics_html(db: Session = Depends(get_db)) -> HTMLResponse:
         _privacy_row("Доля созданных полей", f'{privacy_a["field_creation_rate"]}%', f'{privacy_b["field_creation_rate"]}%'),
         _privacy_row("География заполнена", f'{privacy_a["location_completion_rate"]}%', f'{privacy_b["location_completion_rate"]}%'),
         _privacy_row("Есть севооборот", f'{privacy_a["crop_rotation_completion_rate"]}%', f'{privacy_b["crop_rotation_completion_rate"]}%'),
-        _privacy_row("Запросы в гости", privacy_a["visit_requests"], privacy_b["visit_requests"]),
+        _privacy_row("Запросы ко всем полям", privacy_a["visit_requests"], privacy_b["visit_requests"]),
         _privacy_row("Одобрено запросов", privacy_a["approvals"], privacy_b["approvals"]),
         _privacy_row("Approval rate", f'{privacy_a["approval_rate"]}%', f'{privacy_b["approval_rate"]}%'),
         _privacy_row("Просмотры деталей", privacy_a["detailed_field_views"], privacy_b["detailed_field_views"]),

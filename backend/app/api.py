@@ -1,12 +1,12 @@
 from math import asin, cos, radians, sin, sqrt
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .analytics import track
 from .database import get_db
-from .models import Comment, Field, Neighbor, Post, ProductEvent, Reaction, User, VisitRequest
+from .models import Comment, FarmAccessRequest, Field, Neighbor, Post, ProductEvent, Reaction, User
 from .schemas import (
     CommentCreate,
     CommentOut,
@@ -14,15 +14,16 @@ from .schemas import (
     FieldCreate,
     FieldOut,
     FieldPrivacyUpdate,
+    FarmAccessRequestCreate,
+    FarmAccessRequestOut,
+    FarmAccessRequestStatusUpdate,
+    NearbyFarmerOut,
     NeighborOut,
     PostCreate,
     PublicFieldOut,
     ReactionSet,
     UserOut,
     UserUpdate,
-    VisitRequestCreate,
-    VisitRequestOut,
-    VisitRequestStatusUpdate,
 )
 
 router = APIRouter(prefix="/api")
@@ -56,20 +57,20 @@ def _profile_complete(user: User) -> bool:
     )
 
 
-def _visit_status(db: Session, field_id: int, viewer_id: int | None) -> str | None:
-    if viewer_id is None:
+def _access_request(db: Session, owner_id: int, requester_id: int | None) -> FarmAccessRequest | None:
+    if requester_id is None or requester_id == owner_id:
         return None
-    request = db.scalar(
-        select(VisitRequest).where(
-            VisitRequest.field_id == field_id,
-            VisitRequest.requester_id == viewer_id,
+    return db.scalar(
+        select(FarmAccessRequest).where(
+            FarmAccessRequest.owner_id == owner_id,
+            FarmAccessRequest.requester_id == requester_id,
         )
     )
-    return request.status if request else None
 
 
 def _public_field(db: Session, field: Field, viewer_id: int | None) -> PublicFieldOut:
-    request_status = _visit_status(db, field.id, viewer_id)
+    request = _access_request(db, field.owner_id, viewer_id)
+    request_status = request.status if request else None
     details_visible = field.privacy_variant == "A" or viewer_id == field.owner_id or request_status == "approved"
 
     return PublicFieldOut(
@@ -88,21 +89,20 @@ def _public_field(db: Session, field: Field, viewer_id: int | None) -> PublicFie
         longitude=field.longitude if details_visible else None,
         approximate_latitude=round(field.latitude, 1),
         approximate_longitude=round(field.longitude, 1),
-        visit_request_status=request_status,
+        access_request_status=request_status,
     )
 
 
-def _visit_request_out(request: VisitRequest) -> VisitRequestOut:
-    return VisitRequestOut(
+def _farm_access_request_out(db: Session, request: FarmAccessRequest) -> FarmAccessRequestOut:
+    return FarmAccessRequestOut(
         id=request.id,
-        field_id=request.field_id,
-        field_name=request.field.name,
-        owner_id=request.field.owner_id,
+        owner_id=request.owner_id,
         requester_id=request.requester_id,
         requester_name=request.requester.name,
         requester_username=request.requester.username,
         message=request.message,
         status=request.status,
+        fields_count=db.scalar(select(func.count(Field.id)).where(Field.owner_id == request.owner_id)) or 0,
         created_at=request.created_at,
     )
 
@@ -161,7 +161,14 @@ def _feed_post(post: Post, viewer: User | None, viewer_field: Field | None) -> F
 
 def _neighbor_out(db: Session, neighbor: Neighbor) -> NeighborOut:
     neighbor_user = _get_user_or_404(db, neighbor.neighbor_user_id)
-    return NeighborOut(user=UserOut.model_validate(neighbor_user), created_at=neighbor.created_at)
+    request = _access_request(db, neighbor_user.id, neighbor.user_id)
+    return NeighborOut(
+        user=UserOut.model_validate(neighbor_user),
+        created_at=neighbor.created_at,
+        fields_count=db.scalar(select(func.count(Field.id)).where(Field.owner_id == neighbor_user.id)) or 0,
+        total_area_ha=round(float(db.scalar(select(func.coalesce(func.sum(Field.area_ha), 0)).where(Field.owner_id == neighbor_user.id)) or 0), 1),
+        access_request_status=request.status if request else None,
+    )
 
 
 @router.get("/health")
@@ -251,61 +258,58 @@ def get_public_field(field_id: int, viewer_id: int | None = None, db: Session = 
     return result
 
 
-@router.post("/fields/{field_id}/visit-requests", response_model=VisitRequestOut, status_code=status.HTTP_201_CREATED)
-def create_visit_request(field_id: int, payload: VisitRequestCreate, db: Session = Depends(get_db)) -> VisitRequestOut:
-    field = _get_field_or_404(db, field_id)
+@router.post("/neighbors/{owner_id}/access-requests", response_model=FarmAccessRequestOut, status_code=status.HTTP_201_CREATED)
+def create_farm_access_request(owner_id: int, payload: FarmAccessRequestCreate, db: Session = Depends(get_db)) -> FarmAccessRequestOut:
+    owner = _get_user_or_404(db, owner_id)
     requester = _get_user_or_404(db, payload.requester_id)
-    if field.owner_id == requester.id:
-        raise HTTPException(status_code=400, detail="You cannot request a visit to your own field")
-    existing = db.scalar(select(VisitRequest).where(VisitRequest.field_id == field.id, VisitRequest.requester_id == requester.id))
+    if owner.id == requester.id:
+        raise HTTPException(status_code=400, detail="You cannot request access to your own fields")
+    relation = db.scalar(select(Neighbor).where(Neighbor.user_id == requester.id, Neighbor.neighbor_user_id == owner.id))
+    if not relation:
+        raise HTTPException(status_code=409, detail="Add this farmer to neighbors before requesting access")
+    existing = _access_request(db, owner.id, requester.id)
     if existing:
-        return _visit_request_out(existing)
-    request = VisitRequest(field_id=field.id, requester_id=requester.id, message=payload.message)
+        if existing.status == "declined":
+            existing.status = "pending"
+            existing.message = payload.message.strip()
+            db.commit()
+            db.refresh(existing)
+            track("farm_access_request_sent", user_id=requester.id, properties={"owner_id": owner.id, "resent": True})
+        return _farm_access_request_out(db, existing)
+    request = FarmAccessRequest(owner_id=owner.id, requester_id=requester.id, message=payload.message.strip())
     db.add(request)
     db.commit()
     db.refresh(request)
-    track("visit_request_sent", user_id=requester.id, experiment_variant=field.privacy_variant, properties={"field_id": field.id, "owner_id": field.owner_id})
-    return _visit_request_out(request)
+    track("farm_access_request_sent", user_id=requester.id, properties={"owner_id": owner.id})
+    return _farm_access_request_out(db, request)
 
 
-@router.get("/users/{owner_id}/visit-requests/incoming", response_model=list[VisitRequestOut])
-def incoming_visit_requests(owner_id: int, db: Session = Depends(get_db)) -> list[VisitRequestOut]:
+@router.get("/users/{owner_id}/access-requests/incoming", response_model=list[FarmAccessRequestOut])
+def incoming_farm_access_requests(owner_id: int, db: Session = Depends(get_db)) -> list[FarmAccessRequestOut]:
     _get_user_or_404(db, owner_id)
-    requests = list(
-        db.scalars(
-            select(VisitRequest)
-            .join(Field, VisitRequest.field_id == Field.id)
-            .where(Field.owner_id == owner_id)
-            .order_by(VisitRequest.created_at.desc(), VisitRequest.id.desc())
-        ).all()
-    )
-    return [_visit_request_out(request) for request in requests]
+    rows = list(db.scalars(select(FarmAccessRequest).where(FarmAccessRequest.owner_id == owner_id).order_by(FarmAccessRequest.created_at.desc(), FarmAccessRequest.id.desc())).all())
+    return [_farm_access_request_out(db, row) for row in rows]
 
 
-@router.get("/users/{requester_id}/visit-requests/outgoing", response_model=list[VisitRequestOut])
-def outgoing_visit_requests(requester_id: int, db: Session = Depends(get_db)) -> list[VisitRequestOut]:
+@router.get("/users/{requester_id}/access-requests/outgoing", response_model=list[FarmAccessRequestOut])
+def outgoing_farm_access_requests(requester_id: int, db: Session = Depends(get_db)) -> list[FarmAccessRequestOut]:
     _get_user_or_404(db, requester_id)
-    requests = list(db.scalars(select(VisitRequest).where(VisitRequest.requester_id == requester_id).order_by(VisitRequest.created_at.desc(), VisitRequest.id.desc())).all())
-    return [_visit_request_out(request) for request in requests]
+    rows = list(db.scalars(select(FarmAccessRequest).where(FarmAccessRequest.requester_id == requester_id).order_by(FarmAccessRequest.created_at.desc(), FarmAccessRequest.id.desc())).all())
+    return [_farm_access_request_out(db, row) for row in rows]
 
 
-@router.put("/visit-requests/{request_id}", response_model=VisitRequestOut)
-def update_visit_request(request_id: int, payload: VisitRequestStatusUpdate, db: Session = Depends(get_db)) -> VisitRequestOut:
-    request = db.get(VisitRequest, request_id)
+@router.put("/access-requests/{request_id}", response_model=FarmAccessRequestOut)
+def update_farm_access_request(request_id: int, payload: FarmAccessRequestStatusUpdate, db: Session = Depends(get_db)) -> FarmAccessRequestOut:
+    request = db.get(FarmAccessRequest, request_id)
     if not request:
-        raise HTTPException(status_code=404, detail="Visit request not found")
-    if request.field.owner_id != payload.owner_id:
-        raise HTTPException(status_code=403, detail="Only field owner can answer this request")
+        raise HTTPException(status_code=404, detail="Access request not found")
+    if request.owner_id != payload.owner_id:
+        raise HTTPException(status_code=403, detail="Only farm owner can answer this request")
     request.status = payload.status
     db.commit()
     db.refresh(request)
-    track(
-        "visit_request_approved" if payload.status == "approved" else "visit_request_rejected",
-        user_id=payload.owner_id,
-        experiment_variant=request.field.privacy_variant,
-        properties={"field_id": request.field_id, "requester_id": request.requester_id},
-    )
-    return _visit_request_out(request)
+    track("farm_access_request_approved" if payload.status == "approved" else "farm_access_request_rejected", user_id=payload.owner_id, properties={"requester_id": request.requester_id})
+    return _farm_access_request_out(db, request)
 
 
 @router.post("/posts", response_model=FeedPostOut, status_code=status.HTTP_201_CREATED)
@@ -381,6 +385,43 @@ def list_neighbors(user_id: int, db: Session = Depends(get_db)) -> list[Neighbor
     return [_neighbor_out(db, row) for row in rows]
 
 
+@router.get("/nearby-farmers", response_model=list[NearbyFarmerOut])
+def nearby_farmers(
+    user_id: int,
+    radius_km: int = Query(50, ge=50, le=1000),
+    db: Session = Depends(get_db),
+) -> list[NearbyFarmerOut]:
+    viewer = _get_user_or_404(db, user_id)
+    if radius_km % 50 != 0:
+        raise HTTPException(status_code=422, detail="Radius must use a 50 km step")
+    viewer_fields = list(db.scalars(select(Field).where(Field.owner_id == viewer.id)).all())
+    if not viewer_fields:
+        return []
+    neighbor_ids = set(db.scalars(select(Neighbor.neighbor_user_id).where(Neighbor.user_id == viewer.id)).all())
+    result: list[NearbyFarmerOut] = []
+    for farmer in db.scalars(select(User).where(User.id != viewer.id).order_by(User.id)).all():
+        if farmer.id in neighbor_ids:
+            continue
+        farmer_fields = list(db.scalars(select(Field).where(Field.owner_id == farmer.id)).all())
+        if not farmer_fields:
+            continue
+        distance = min(
+            _distance_km(own.latitude, own.longitude, candidate.latitude, candidate.longitude)
+            for own in viewer_fields
+            for candidate in farmer_fields
+        )
+        if distance <= radius_km:
+            result.append(NearbyFarmerOut(
+                user=UserOut.model_validate(farmer),
+                fields_count=len(farmer_fields),
+                total_area_ha=round(sum(field.area_ha or 0 for field in farmer_fields), 1),
+                nearest_field_distance_km=round(distance, 1),
+            ))
+    result.sort(key=lambda item: (item.nearest_field_distance_km, item.user.name))
+    track("nearby_farmers_opened", user_id=viewer.id, properties={"radius_km": radius_km, "items": len(result)})
+    return result
+
+
 @router.post("/neighbors/{neighbor_user_id}", response_model=NeighborOut, status_code=status.HTTP_201_CREATED)
 def add_neighbor(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> NeighborOut:
     _get_user_or_404(db, user_id)
@@ -418,6 +459,18 @@ def get_neighbor_profile(neighbor_user_id: int, user_id: int, db: Session = Depe
         raise HTTPException(status_code=404, detail="User is not in your neighbors")
     track("neighbor_profile_opened", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id})
     return neighbor_user
+
+
+@router.get("/neighbors/{neighbor_user_id}/fields", response_model=list[PublicFieldOut])
+def neighbor_fields(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> list[PublicFieldOut]:
+    _get_user_or_404(db, user_id)
+    _get_user_or_404(db, neighbor_user_id)
+    relation = db.scalar(select(Neighbor).where(Neighbor.user_id == user_id, Neighbor.neighbor_user_id == neighbor_user_id))
+    if not relation:
+        raise HTTPException(status_code=404, detail="User is not in your neighbors")
+    fields = list(db.scalars(select(Field).where(Field.owner_id == neighbor_user_id).order_by(Field.id)).all())
+    track("neighbor_fields_opened", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id, "fields": len(fields)})
+    return [_public_field(db, field, user_id) for field in fields]
 
 
 @router.get("/internal/metrics")

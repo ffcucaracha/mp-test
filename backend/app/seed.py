@@ -15,7 +15,7 @@ from .models import (
     Post,
     Reaction,
     User,
-    VisitRequest,
+    FarmAccessRequest,
 )
 from .seed_fields import SEED_FIELDS
 
@@ -115,8 +115,8 @@ def seed_data() -> None:
             Comment(post_id=2, author_id=5, text="Мы рядом. На пасеке уже заметно движение во время цветения."),
             Comment(post_id=6, author_id=5, text="Предупреждение получили, спасибо. Ульи закроем на время обработки."),
             Neighbor(user_id=1, neighbor_user_id=2), Neighbor(user_id=1, neighbor_user_id=5), Neighbor(user_id=2, neighbor_user_id=1), Neighbor(user_id=2, neighbor_user_id=5), Neighbor(user_id=5, neighbor_user_id=1), Neighbor(user_id=5, neighbor_user_id=2),
-            VisitRequest(field_id=2, requester_id=2, message="Хотел бы посмотреть детали поля и обменяться опытом.", status="pending"),
-            VisitRequest(field_id=3, requester_id=3, message="Можно посмотреть детали поля перед поездкой?", status="approved"),
+            FarmAccessRequest(owner_id=1, requester_id=2, message="Хотел бы посмотреть все поля хозяйства и обменяться опытом.", status="pending"),
+            FarmAccessRequest(owner_id=2, requester_id=1, message="Можно посмотреть все поля перед поездкой?", status="approved"),
         ])
         db.flush()
 

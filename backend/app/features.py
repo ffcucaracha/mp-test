@@ -21,7 +21,7 @@ from .models import (
     ProductEvent,
     Reaction,
     User,
-    VisitRequest,
+    FarmAccessRequest,
 )
 from .schemas import (
     AlertCreate,
@@ -63,10 +63,10 @@ def _can_view_field(db: Session, field: Field, viewer_id: int) -> bool:
     if viewer_id == field.owner_id or field.privacy_variant == "A":
         return True
     request = db.scalar(
-        select(VisitRequest).where(
-            VisitRequest.field_id == field.id,
-            VisitRequest.requester_id == viewer_id,
-            VisitRequest.status == "approved",
+        select(FarmAccessRequest).where(
+            FarmAccessRequest.owner_id == field.owner_id,
+            FarmAccessRequest.requester_id == viewer_id,
+            FarmAccessRequest.status == "approved",
         )
     )
     return request is not None
