@@ -199,21 +199,31 @@ export function FeedbackSection({ userId }: { userId: number }) {
 }
 
 function ScoreQuestion({ label, value, onChange, sunflower = false }: { label: string; value: number; onChange: (value: number) => void; sunflower?: boolean }) {
+  const [hoverScore, setHoverScore] = useState<number | null>(null)
+  const displayedScore = hoverScore ?? value
+
   return (
-    <fieldset className="feedback-score-question">
+    <fieldset className={`feedback-score-question ${sunflower ? 'sunflower-scale' : ''}`}>
       <legend>{label}</legend>
-      <div className="feedback-score-row">
-        {[1, 2, 3, 4, 5].map((score) => (
-          <button
-            key={score}
-            type="button"
-            className={value === score ? 'selected' : ''}
-            aria-label={`${score} из 5`}
-            onClick={() => onChange(score)}
-          >
-            {sunflower ? '🌻' : score}
-          </button>
-        ))}
+      <div className="feedback-score-row" onMouseLeave={() => setHoverScore(null)}>
+        {[1, 2, 3, 4, 5].map((score) => {
+          const selected = sunflower ? score <= displayedScore : value === score
+          return (
+            <button
+              key={score}
+              type="button"
+              className={selected ? 'selected' : ''}
+              aria-label={`${score} из 5`}
+              aria-pressed={score === value}
+              onMouseEnter={() => sunflower && setHoverScore(score)}
+              onFocus={() => sunflower && setHoverScore(score)}
+              onBlur={() => sunflower && setHoverScore(null)}
+              onClick={() => onChange(score)}
+            >
+              {sunflower ? '🌻' : score}
+            </button>
+          )
+        })}
       </div>
     </fieldset>
   )
