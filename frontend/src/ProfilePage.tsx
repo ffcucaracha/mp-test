@@ -43,7 +43,6 @@ export function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: 
     <section className="profile-stage">
       <div className="profile-summary-card">
         <div className="profile-head compact-profile-head">
-          <Avatar name={user.name} large />
           <div><h1>{user.name}</h1><div className="username">@{user.username}</div></div>
         </div>
         <div className="profile-stat-row"><span>Соседи</span><strong>{neighborCount}</strong></div>
@@ -63,7 +62,7 @@ export function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: 
 
         <label className="checkbox-row">
           <input type="checkbox" checked={form.is_beekeeper} onChange={(e) => setForm({ ...form, is_beekeeper: e.target.checked })} />
-          <span><strong>У меня есть пасека</strong><small>Пчеловодство — дополнительный признак профиля, а не отдельная роль.</small></span>
+          <span><strong>У меня есть пасека</strong><small>Получать предупреждения об обработках рядом с пасекой.</small></span>
         </label>
 
         <FormField label="Радиус новостей, км">
@@ -92,11 +91,6 @@ export function ProfilePage({ user, onSaved, onLogout }: { user: User; onSaved: 
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="form-field"><span>{label}</span>{children}</label>
-}
-
-function Avatar({ name, large = false }: { name: string; large?: boolean }) {
-  const initials = name.split(' ').map((item) => item[0]).join('').slice(0, 2).toUpperCase()
-  return <div className={`avatar ${large ? 'large' : ''}`}>{initials}</div>
 }
 
 function toUserUpdate(user: User): UserUpdate {
