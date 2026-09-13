@@ -31,10 +31,10 @@ def _photo(label: str, color: str) -> str:
     return f"data:image/svg+xml,{quote(svg)}"
 
 
-def _demo_field(owner_id: int, name: str, crop: str, latitude: float, longitude: float, area_ha: float) -> Field:
+def _demo_field(field_id: int, owner_id: int, name: str, crop: str, latitude: float, longitude: float, area_ha: float) -> Field:
     delta = 0.008
     return Field(
-        owner_id=owner_id, name=name, crop=crop, rotation="", latitude=latitude, longitude=longitude, area_ha=area_ha,
+        id=field_id, owner_id=owner_id, name=name, crop=crop, rotation="", latitude=latitude, longitude=longitude, area_ha=area_ha,
         geometry={
             "type": "Polygon",
             "coordinates": [[
@@ -87,11 +87,11 @@ def seed_data() -> None:
             for item in SEED_FIELDS
         ]
         fields.extend([
-            _demo_field(7, "Любинское-1", "Пшеница яровая", 55.160, 72.695, 87.0),
-            _demo_field(8, "Берёзовое", "Рапс", 55.185, 72.730, 64.0),
-            _demo_field(9, "Луговой клин", "Люцерна", 55.135, 72.745, 51.0),
-            _demo_field(10, "Сибирский колос", "Ячмень", 55.205, 72.680, 93.0),
-            _demo_field(11, "Медоносный участок", "Фацелия", 55.175, 72.710, 18.0),
+            _demo_field(53, 7, "Любинское-1", "Пшеница яровая", 55.160, 72.695, 87.0),
+            _demo_field(54, 8, "Берёзовое", "Рапс", 55.185, 72.730, 64.0),
+            _demo_field(55, 9, "Луговой клин", "Люцерна", 55.135, 72.745, 51.0),
+            _demo_field(56, 10, "Сибирский колос", "Ячмень", 55.205, 72.680, 93.0),
+            _demo_field(57, 11, "Медоносный участок", "Фацелия", 55.175, 72.710, 18.0),
         ])
         db.add_all(fields)
         db.flush()
