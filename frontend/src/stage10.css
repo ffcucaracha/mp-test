@@ -11,6 +11,13 @@
   background: #f4f8fb;
 }
 
+.weather-forecast-button { margin-top: 10px; border: 0; background: transparent; color: #1f673e; font: inherit; font-weight: 800; padding: 0; cursor: pointer; }
+.weather-modal-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 18px; background: rgba(17, 24, 19, .45); }
+.weather-modal { width: min(560px, 100%); max-height: 80vh; overflow: auto; padding: 18px; border-radius: 18px; background: #fff; box-shadow: 0 16px 48px rgba(0,0,0,.25); }
+.weather-hours { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 16px; }
+.weather-hours > div { display: grid; gap: 4px; padding: 9px; border-radius: 10px; background: #f4f7f2; font-size: 12px; }
+.weather-hours time { color: #607060; }
+
 .weather-panel-heading {
   display: flex;
   align-items: flex-start;
