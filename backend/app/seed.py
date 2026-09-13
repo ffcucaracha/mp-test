@@ -52,12 +52,13 @@ def seed_data() -> None:
             User(id=3, name="Марина Белова", username="marina_agro", region="Республика Татарстан", specialization="Растениеводство", farm_name="Белова Ферма", bio="Работаю с полевыми культурами. Фиксирую состояние участков и историю по сезонам.", news_radius_km=100, broadcast_radius_km=50),
             User(id=4, name="Сергей Котов", username="kotov_agro", region="Республика Татарстан", specialization="Кормовые культуры", farm_name="Котов Агро", bio="Кормовые культуры, техника и экономика небольшого хозяйства.", news_radius_km=100, broadcast_radius_km=100),
             User(id=5, name="Ольга Лебедева", username="olga_bee", region="Республика Татарстан", specialization="Растениеводство и пчеловодство", farm_name="Лебедевы поля и пасека", bio="Выращиваем культуры и держим пасеку. Нужны своевременные предупреждения об обработках.", is_beekeeper=True, news_radius_km=100, broadcast_radius_km=100),
-            User(id=6, name="Павел Орлов", username="orlov_far", region="Республика Татарстан", specialization="Зерновые", farm_name="Орлов Поля", bio="Небольшое хозяйство — полезно видеть только действительно локальные события.", news_radius_km=50, broadcast_radius_km=100),
+            User(id=6, name="Павел Орлов", username="orlov_far", region="Республика Татарстан", specialization="Кормовые культуры", farm_name="Орлов Поля", bio="Небольшое удалённое хозяйство с кормовыми культурами — полезно видеть только действительно локальные события.", news_radius_km=50, broadcast_radius_km=100),
         ]
         db.add_all(users)
         db.flush()
 
-        # Real polygons and 2026 crops are taken from the KML supplied for the hackathon.
+        # All 52 real polygons and 2026 crops are taken from the KML supplied for the hackathon.
+        # Ownership is grouped geographically, so every user's fields form one compact farm.
         fields = [Field(rotation="", **item) for item in SEED_FIELDS]
         db.add_all(fields)
         db.flush()
@@ -83,19 +84,25 @@ def seed_data() -> None:
             *[CropSeason(field_id=field.id, year=2026, crop=field.crop) for field in fields[6:]],
         ])
 
-        apiary = Apiary(owner_id=5, name="Пасека у поля № 37", latitude=55.6890, longitude=50.5410, alert_radius_km=50)
+        apiary = Apiary(
+            owner_id=5,
+            name=f"Пасека у поля {fields[5].name}",
+            latitude=(fields[2].latitude + fields[5].latitude) / 2,
+            longitude=(fields[2].longitude + fields[5].longitude) / 2,
+            alert_radius_km=50,
+        )
         db.add(apiary)
         db.flush()
 
         now = datetime.now(timezone.utc)
         posts = [
             Post(id=1, author_id=1, field_id=1, text="На нижних листьях появились пятна. У кого было похожее?", status="problem", photo_data_url=_photo("Пятна на пшенице", "#d9d7a4"), latitude=fields[0].latitude, longitude=fields[0].longitude, created_at=now - timedelta(hours=2)),
-            Post(id=2, author_id=1, field_id=2, text="Подсолнечник вошёл в цветение. Опылители уже активно работают.", status="flowering", photo_data_url=_photo("Цветение подсолнечника", "#e8df78"), latitude=fields[1].latitude, longitude=fields[1].longitude, created_at=now - timedelta(days=1)),
-            Post(id=3, author_id=2, field_id=3, text="После ночного дождя часть поля переувлажнена, но подсолнечник развивается ровно.", status="sprouts", photo_data_url=_photo("Подсолнечник после дождя", "#afd08c"), latitude=fields[2].latitude, longitude=fields[2].longitude, created_at=now - timedelta(hours=6)),
+            Post(id=2, author_id=1, field_id=2, text="Рапс вошёл в цветение. Опылители уже активно работают.", status="flowering", photo_data_url=_photo("Цветение рапса", "#e8df78"), latitude=fields[1].latitude, longitude=fields[1].longitude, created_at=now - timedelta(days=1)),
+            Post(id=3, author_id=2, field_id=3, text="После ночного дождя часть поля переувлажнена, но рапс развивается ровно.", status="sprouts", photo_data_url=_photo("Рапс после дождя", "#afd08c"), latitude=fields[2].latitude, longitude=fields[2].longitude, created_at=now - timedelta(hours=6)),
             Post(id=4, author_id=3, field_id=4, text="Проверили участок пара: сорняки локально пошли второй волной, отмечаю перед обработкой.", status="problem", photo_data_url=_photo("Участок пара", "#c6b58a"), latitude=fields[3].latitude, longitude=fields[3].longitude, created_at=now - timedelta(hours=10)),
             Post(id=5, author_id=4, field_id=5, text="Закончили посев кукурузы на корм. Проверяем глубину и равномерность.", status="sowing", photo_data_url=_photo("Посев кукурузы", "#cbb889"), latitude=fields[4].latitude, longitude=fields[4].longitude, created_at=now - timedelta(days=2)),
             Post(id=6, author_id=2, field_id=3, text="Плановая обработка после обследования поля. Соседние пасеки предупреждены заранее.", status="treatment", photo_data_url=_photo("Обработка поля", "#b9c4a9"), latitude=fields[2].latitude, longitude=fields[2].longitude, created_at=now - timedelta(hours=1)),
-            Post(id=7, author_id=5, field_id=6, text="Кукуруза набирает массу. На пасеке рядом продолжаем следить за обработками соседей.", status="sprouts", photo_data_url=_photo("Кукуруза и пасека", "#d8d3ef"), latitude=fields[5].latitude, longitude=fields[5].longitude, created_at=now - timedelta(hours=4)),
+            Post(id=7, author_id=5, field_id=6, text="Рапс набирает цвет. На пасеке рядом продолжаем следить за обработками соседей.", status="flowering", photo_data_url=_photo("Рапс и пасека", "#d8d3ef"), latitude=fields[5].latitude, longitude=fields[5].longitude, created_at=now - timedelta(hours=4)),
         ]
         db.add_all(posts)
         db.flush()
@@ -119,7 +126,7 @@ def seed_data() -> None:
         db.flush()
 
         db.add_all([
-            AlertRecipient(alert_id=pesticide_alert.id, user_id=5, apiary_id=apiary.id, distance_km=1.1),
+            AlertRecipient(alert_id=pesticide_alert.id, user_id=5, apiary_id=apiary.id, distance_km=0.4),
             AlertRecipient(alert_id=weather_alert.id, user_id=1, apiary_id=None, distance_km=0.0),
         ])
         db.flush()
