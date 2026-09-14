@@ -2,8 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-export default defineConfig(({ mode }) => {
-  const isCapacitorBuild = mode === 'capacitor'
+export default defineConfig(() => {
+  const isCapacitorBuild = process.env.CAPACITOR_BUILD === '1'
 
   return {
     plugins: [
