@@ -10,6 +10,8 @@ DISPLAY_NO="${DEMO_DISPLAY:-:99}"
 VIDEO_SIZE="${DEMO_VIDEO_SIZE:-450x1000}"
 BASE_URL="${DEMO_BASE_URL:-http://127.0.0.1:5173}"
 VIDEO_FILE="${DEMO_VIDEO_FILE:-$OUTPUT_DIR/agroconnect-demo-$(date +%Y%m%d-%H%M%S).mp4}"
+RAW_VIDEO_FILE="${VIDEO_FILE%.mp4}.raw.mp4"
+SUBTITLE_FILE="${VIDEO_FILE%.mp4}.srt"
 
 for command in Xvfb ffmpeg python3; do
   command -v "$command" >/dev/null || { echo "Не найдено: $command" >&2; exit 1; }
@@ -37,15 +39,21 @@ sleep 1
 
 ffmpeg -y -loglevel warning \
   -f x11grab -framerate 30 -video_size "$VIDEO_SIZE" -i "${DISPLAY_NO}.0" \
-  -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p "$VIDEO_FILE" &
+  -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p "$RAW_VIDEO_FILE" &
 FFMPEG_PID=$!
 sleep 1
 
 DISPLAY="$DISPLAY_NO" \
 DEMO_BASE_URL="$BASE_URL" \
+DEMO_SUBTITLE_FILE="$SUBTITLE_FILE" \
 python3 -m pytest -q -s demo/test_demo_video.py
 
 kill -INT "$FFMPEG_PID"
 wait "$FFMPEG_PID" || true
 unset FFMPEG_PID
+ffmpeg -y -loglevel warning -i "$RAW_VIDEO_FILE" \
+  -vf "subtitles='$SUBTITLE_FILE':charenc=UTF-8:force_style='FontName=DejaVu Sans,FontSize=22,PrimaryColour=&H00FFFFFF,OutlineColour=&H80000000,BorderStyle=1,Outline=2,Shadow=0,Alignment=2,MarginV=72'" \
+  -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p "$VIDEO_FILE"
+rm -f "$RAW_VIDEO_FILE"
 echo "Готово: $VIDEO_FILE"
+echo "Субтитры: $SUBTITLE_FILE"
