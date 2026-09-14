@@ -122,23 +122,13 @@
 }
 
 .photo-picker {
-  position: relative;
-  min-height: 210px;
   overflow: hidden;
   border: 1px dashed #9fb29f;
   border-radius: 14px;
   background: #f4f8f4;
-  cursor: pointer;
 }
 
-.photo-picker input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.photo-picker img {
+.photo-picker > img {
   display: block;
   width: 100%;
   height: 260px;
@@ -146,10 +136,11 @@
 }
 
 .photo-placeholder {
-  min-height: 210px;
+  min-height: 150px;
   display: grid;
   place-content: center;
   gap: 5px;
+  padding: 18px;
   text-align: center;
   color: #46614b;
 }
@@ -161,6 +152,57 @@
 .photo-placeholder small,
 .photo-name {
   color: #788478;
+}
+
+.photo-source-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  border-top: 1px solid #dbe5db;
+  background: #dbe5db;
+}
+
+.photo-source-area {
+  position: relative;
+  min-height: 104px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 10px;
+  background: #fff;
+  color: #315f39;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.photo-source-area:active {
+  background: #edf5ed;
+}
+
+.photo-source-area input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.photo-source-area b {
+  font-size: 15px;
+}
+
+.photo-source-area small {
+  color: #758075;
+  font-size: 12px;
+}
+
+.photo-source-icon {
+  font-size: 28px;
+  line-height: 1;
 }
 
 .publication-meta {
@@ -376,13 +418,12 @@
     grid-template-columns: 1fr;
   }
 
-  .photo-picker,
-  .photo-placeholder {
-    min-height: 190px;
+  .photo-picker > img {
+    height: 230px;
   }
 
-  .photo-picker img {
-    height: 230px;
+  .photo-source-area {
+    min-height: 112px;
   }
 
   .reaction-button small {
