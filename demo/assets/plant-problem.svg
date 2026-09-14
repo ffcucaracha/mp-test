@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+  <rect width="960" height="640" fill="#dcead2"/>
+  <path d="M485 560C492 390 530 214 730 95" fill="none" stroke="#47723b" stroke-width="28" stroke-linecap="round"/>
+  <path d="M486 330C289 200 125 213 85 347c151 72 295 74 401-17Z" fill="#6da951"/>
+  <path d="M518 278C670 125 830 148 891 277c-110 92-251 117-373 1Z" fill="#74b357"/>
+  <circle cx="306" cy="285" r="34" fill="#8b5734"/><circle cx="362" cy="314" r="25" fill="#8b5734"/><circle cx="266" cy="341" r="20" fill="#8b5734"/>
+  <text x="48" y="592" font-family="sans-serif" font-size="34" fill="#33542c">Демо-фото листа с пятнистостью</text>
+</svg>
