@@ -62,10 +62,10 @@ npx cap sync android
 
 ```bash
 sudo apt update
-sudo apt install -y xvfb ffmpeg google-chrome-stable
+sudo apt install -y xvfb ffmpeg
 ```
 
-Если Chrome уже установлен из другого источника, достаточно наличия команды `google-chrome`, `chromium` или `chromium-browser`.
+Chrome у тебя уже используется для веб-версии. Скрипту достаточно, чтобы команда `google-chrome`, `chromium` или `chromium-browser` была доступна в `PATH`.
 
 Установи Python-зависимости отдельно от backend:
 
