@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import { getOutbox, removeOutboxItem, updateOutboxBody, type OutboxItem } from './offline'
 
@@ -22,6 +23,13 @@ export function OfflineDraftsPanel({ open, onClose }: { open: boolean; onClose: 
     const changed = () => { if (open) void reload() }
     window.addEventListener('agroconnect:outbox-changed', changed)
     return () => window.removeEventListener('agroconnect:outbox-changed', changed)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
   }, [open])
 
   const activeItem = useMemo(() => items.find((item) => item.id === editing) ?? null, [editing, items])
@@ -51,12 +59,12 @@ export function OfflineDraftsPanel({ open, onClose }: { open: boolean; onClose: 
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div className="offline-drafts-backdrop" role="presentation" onClick={onClose}>
       <section className="offline-drafts-panel" role="dialog" aria-modal="true" aria-label="Неотправленные действия" onClick={(event) => event.stopPropagation()}>
         <div className="offline-drafts-head">
           <div><strong>Неотправленные действия</strong><span>{items.length} в очереди</span></div>
-          <button type="button" onClick={onClose}>×</button>
+          <button type="button" onClick={onClose} aria-label="Закрыть очередь">×</button>
         </div>
         {message && <p className="offline-drafts-message">{message}</p>}
         {items.length === 0 ? <div className="offline-drafts-empty">Очередь пуста.</div> : (
@@ -96,6 +104,7 @@ export function OfflineDraftsPanel({ open, onClose }: { open: boolean; onClose: 
           </div>
         )}
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
