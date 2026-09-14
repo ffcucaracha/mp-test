@@ -83,7 +83,7 @@ function AgroConnectApp() {
           {users.length === 0 && !navigator.onLine && <p className="muted">Первый вход требует интернет. После первого успешного запуска профиль и рабочие данные доступны из локального кэша.</p>}
           <div className="user-list">
             {users.map((user) => (
-              <button key={user.id} className="user-option" onClick={() => login(user.id)}>
+              <button key={user.id} className="user-option" data-demo-user={user.username} onClick={() => login(user.id)}>
                 <Avatar name={user.name} />
                 <span><strong>{user.name}</strong><small>@{user.username} · {user.region}</small></span>
                 <span className="chevron">›</span>
@@ -121,11 +121,11 @@ function AgroConnectApp() {
       </main>
 
       <nav className="bottom-nav dashboard-nav">
-        <NavLink to="/today" className={({ isActive }) => (isActive ? 'active' : '')}><span>☀</span>Сегодня</NavLink>
-        <NavLink to="/feed" className={({ isActive }) => (isActive ? 'active' : '')}><span>⌂</span>Лента</NavLink>
-        <NavLink to="/fields" className={({ isActive }) => (isActive ? 'active' : '')}><span>⌖</span>Поля</NavLink>
-        <NavLink to="/neighbors" className={({ isActive }) => (isActive ? 'active' : '')}><span>◎</span>Соседи</NavLink>
-        <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}><span>○</span>Профиль</NavLink>
+        <NavLink to="/today" data-demo-nav="today" className={({ isActive }) => (isActive ? 'active' : '')}><span>☀</span>Сегодня</NavLink>
+        <NavLink to="/feed" data-demo-nav="feed" className={({ isActive }) => (isActive ? 'active' : '')}><span>⌂</span>Лента</NavLink>
+        <NavLink to="/fields" data-demo-nav="fields" className={({ isActive }) => (isActive ? 'active' : '')}><span>⌖</span>Поля</NavLink>
+        <NavLink to="/neighbors" data-demo-nav="neighbors" className={({ isActive }) => (isActive ? 'active' : '')}><span>◎</span>Соседи</NavLink>
+        <NavLink to="/profile" data-demo-nav="profile" className={({ isActive }) => (isActive ? 'active' : '')}><span>○</span>Профиль</NavLink>
       </nav>
     </div>
   )
