@@ -53,9 +53,11 @@
 
 .offline-drafts-panel {
   width: 100%;
-  max-height: 82vh;
-  overflow: auto;
-  padding: 16px;
+  max-height: min(82dvh, calc(100dvh - 40px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px));
   border-radius: 20px 20px 0 0;
   background: #fff;
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.14);
@@ -68,6 +70,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.offline-drafts-head {
+  position: sticky;
+  top: -16px;
+  z-index: 2;
+  margin: -16px -16px 0;
+  padding: 16px 16px 12px;
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  border-bottom: 1px solid #edf1ed;
 }
 
 .offline-drafts-head > div,
@@ -83,18 +96,20 @@
 }
 
 .offline-drafts-head > button {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   border: 0;
   border-radius: 50%;
   background: #eef2ee;
-  font-size: 24px;
+  font-size: 28px;
 }
 
 .offline-drafts-list {
   display: grid;
   gap: 10px;
   margin-top: 14px;
+  padding-bottom: 4px;
 }
 
 .offline-draft-card {
@@ -152,11 +167,13 @@
 
 .offline-draft-actions {
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .offline-draft-actions button {
   border: 0;
   border-radius: 9px;
+  min-height: 40px;
   padding: 7px 10px;
   background: #edf3ee;
   color: #24452d;
@@ -172,4 +189,10 @@
   padding: 24px 0;
   text-align: center;
   color: #68756c;
+}
+
+@media (max-width: 520px) {
+  .offline-drafts-panel {
+    max-height: calc(100dvh - max(24px, env(safe-area-inset-top, 0px)));
+  }
 }
