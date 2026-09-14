@@ -458,3 +458,127 @@ def nearby_farmers(
     viewer_fields = list(db.scalars(select(Field).where(Field.owner_id == viewer.id)).all())
     if not viewer_fields:
         return []
+    neighbor_ids = set(db.scalars(select(Neighbor.neighbor_user_id).where(Neighbor.user_id == viewer.id)).all())
+    result: list[NearbyFarmerOut] = []
+    for farmer in db.scalars(select(User).where(User.id != viewer.id).order_by(User.id)).all():
+        if farmer.id in neighbor_ids:
+            continue
+        farmer_fields = list(db.scalars(select(Field).where(Field.owner_id == farmer.id)).all())
+        if not farmer_fields:
+            continue
+        distance = min(
+            _distance_km(own.latitude, own.longitude, candidate.latitude, candidate.longitude)
+            for own in viewer_fields
+            for candidate in farmer_fields
+        )
+        if distance <= radius_km:
+            result.append(NearbyFarmerOut(
+                user=UserOut.model_validate(farmer),
+                fields_count=len(farmer_fields),
+                total_area_ha=round(sum(field.area_ha or 0 for field in farmer_fields), 1),
+                nearest_field_distance_km=round(distance, 1),
+            ))
+    result.sort(key=lambda item: (item.nearest_field_distance_km, item.user.name))
+    track("nearby_farmers_opened", user_id=viewer.id, properties={"radius_km": radius_km, "items": len(result)})
+    return result
+
+
+@router.post("/neighbors/{neighbor_user_id}", response_model=NeighborOut, status_code=status.HTTP_201_CREATED, tags=["Neighbors"], summary="Добавить фермера в соседи")
+def add_neighbor(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> NeighborOut:
+    _get_user_or_404(db, user_id)
+    _get_user_or_404(db, neighbor_user_id)
+    if user_id == neighbor_user_id:
+        raise HTTPException(status_code=400, detail="You cannot add yourself as a neighbor")
+    existing = db.scalar(select(Neighbor).where(Neighbor.user_id == user_id, Neighbor.neighbor_user_id == neighbor_user_id))
+    if existing:
+        return _neighbor_out(db, existing)
+    row = Neighbor(user_id=user_id, neighbor_user_id=neighbor_user_id)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    track("neighbor_added", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id})
+    return _neighbor_out(db, row)
+
+
+@router.delete("/neighbors/{neighbor_user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_neighbor(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> Response:
+    _get_user_or_404(db, user_id)
+    row = db.scalar(select(Neighbor).where(Neighbor.user_id == user_id, Neighbor.neighbor_user_id == neighbor_user_id))
+    if row:
+        db.delete(row)
+        db.commit()
+        track("neighbor_removed", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/neighbors/{neighbor_user_id}/profile", response_model=UserOut)
+def get_neighbor_profile(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> User:
+    _get_user_or_404(db, user_id)
+    neighbor_user = _get_user_or_404(db, neighbor_user_id)
+    relation = db.scalar(select(Neighbor).where(Neighbor.user_id == user_id, Neighbor.neighbor_user_id == neighbor_user_id))
+    if not relation:
+        raise HTTPException(status_code=404, detail="User is not in your neighbors")
+    track("neighbor_profile_opened", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id})
+    return neighbor_user
+
+
+@router.get("/neighbors/{neighbor_user_id}/fields", response_model=list[PublicFieldOut], tags=["Neighbors"], summary="Получить поля добавленного соседа")
+def neighbor_fields(neighbor_user_id: int, user_id: int, db: Session = Depends(get_db)) -> list[PublicFieldOut]:
+    _get_user_or_404(db, user_id)
+    _get_user_or_404(db, neighbor_user_id)
+    relation = db.scalar(select(Neighbor).where(Neighbor.user_id == user_id, Neighbor.neighbor_user_id == neighbor_user_id))
+    if not relation:
+        raise HTTPException(status_code=404, detail="User is not in your neighbors")
+    fields = list(db.scalars(select(Field).where(Field.owner_id == neighbor_user_id).order_by(Field.id)).all())
+    track("neighbor_fields_opened", user_id=user_id, properties={"neighbor_user_id": neighbor_user_id, "fields": len(fields)})
+    return [_public_field(db, field, user_id) for field in fields]
+
+
+@router.get("/internal/metrics")
+def internal_metrics(db: Session = Depends(get_db)) -> dict:
+    users = list(db.scalars(select(User)).all())
+    event_rows = db.execute(
+        select(ProductEvent.event_name, func.count(ProductEvent.id)).group_by(ProductEvent.event_name)
+    ).all()
+    event_counts = {name: count for name, count in event_rows}
+
+    privacy = {}
+    for variant in ("A", "B"):
+        variant_events = db.execute(
+            select(ProductEvent.event_name, func.count(ProductEvent.id))
+            .where(ProductEvent.experiment_variant == variant)
+            .group_by(ProductEvent.event_name)
+        ).all()
+        privacy[variant] = {
+            "fields": db.scalar(select(func.count(Field.id)).where(Field.privacy_variant == variant)) or 0,
+            "events": {name: count for name, count in variant_events},
+        }
+
+    recent = list(db.scalars(select(ProductEvent).order_by(ProductEvent.created_at.desc(), ProductEvent.id.desc()).limit(30)).all())
+
+    return {
+        "activation": {
+            "users": len(users),
+            "profiles_completed": sum(1 for user in users if _profile_complete(user)),
+            "fields": db.scalar(select(func.count(Field.id))) or 0,
+            "fields_with_location": db.scalar(select(func.count(Field.id)).where(Field.latitude.is_not(None), Field.longitude.is_not(None))) or 0,
+        },
+        "social": {
+            "posts": db.scalar(select(func.count(Post.id))) or 0,
+            "reactions": db.scalar(select(func.count(Reaction.id))) or 0,
+            "comments": db.scalar(select(func.count(Comment.id))) or 0,
+            "neighbors": db.scalar(select(func.count(Neighbor.id))) or 0,
+        },
+        "events": event_counts,
+        "privacy_experiment": privacy,
+        "recent_events": [
+            {
+                "event_name": event.event_name,
+                "user_id": event.user_id,
+                "experiment_variant": event.experiment_variant,
+                "properties": event.properties,
+                "created_at": event.created_at.isoformat(),
+            }
+            for event in recent
+        ],
+    }
