@@ -259,7 +259,15 @@ function PostCard({ post, currentUser, onReact, onComment }: { post: FeedPost; c
       <div className="post-context-row"><span className={`status-chip status-${post.status}`}>{STATUS_LABELS[post.status]}</span><span>{post.field_name} · {post.crop}</span>{post.distance_km !== null && <span>⌖ {post.distance_km} км</span>}</div>
       <img className="post-photo" src={post.photo_data_url} alt={`${STATUS_LABELS[post.status]} — ${post.crop}`} />
       {post.text && <p className="social-post-text">{post.text}</p>}
-      <div className="reaction-row"><button type="button" className={`reaction-button healthy ${post.viewer_reaction === 1 ? 'active' : ''}`} onClick={() => onReact(1)} aria-label="Здоровый колос"><span>🌾</span><b>{post.healthy_count}</b><small>здорово</small></button><button type="button" className={`reaction-button wilted ${post.viewer_reaction === -1 ? 'active' : ''}`} onClick={() => onReact(-1)} aria-label="Увядший колос"><span>🥀</span><b>{post.wilted_count}</b><small>проблема</small></button><span className="comment-count">💬 {post.comments.length}</span></div>
+      <div className="reaction-row">
+        <button type="button" className={`reaction-button healthy ${post.viewer_reaction === 1 ? 'active' : ''}`} onClick={() => onReact(1)} aria-label="Здоровый колос">
+          <span>🌾</span><b>{post.healthy_count}</b>
+        </button>
+        <button type="button" className={`reaction-button wilted ${post.viewer_reaction === -1 ? 'active' : ''}`} onClick={() => onReact(-1)} aria-label="Увядший колос">
+          <span>🥀</span><b>{post.wilted_count}</b>
+        </button>
+        <span className="comment-count">💬 {post.comments.length}</span>
+      </div>
       {post.comments.length > 0 && <div className="comment-list">{post.comments.map((item) => <div className="comment-item" key={item.id}><Avatar name={item.author.name} small /><div><strong>{item.author.name}</strong><p>{item.text}</p>{item.id < 0 && <small>ждёт отправки</small>}</div></div>)}</div>}
       <form className="comment-form" onSubmit={submitComment}><Avatar name={currentUser.name} small /><input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Ответить по делу…" maxLength={1000} /><button type="submit" disabled={!commentText.trim() || commenting}>{commenting ? '…' : '↗'}</button></form>
     </article>
