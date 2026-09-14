@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:capacitor": "tsc -b && vite build --mode capacitor && node scripts/write-capacitor-sw-cleanup.mjs",
+    "build:capacitor": "tsc -b && CAPACITOR_BUILD=1 vite build && node scripts/write-capacitor-sw-cleanup.mjs",
     "preview": "vite preview",
     "cap:add": "cap add android",
     "cap:patch-android": "node scripts/patch-android-workmanager.mjs",
