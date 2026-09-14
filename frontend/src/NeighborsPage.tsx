@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { api } from './api'
 import type { FarmAccessRequest, NeighborLink, NearbyFarmer, PublicField, User } from './types'
 
 const RADII = Array.from({ length: 20 }, (_, index) => (index + 1) * 50)
 const ACCESS_MESSAGE = 'Хочу посмотреть все поля хозяйства и обменяться опытом.'
+
+function errorMessage(reason: unknown) {
+  return reason instanceof Error ? reason.message : 'Не удалось обновить данные'
+}
 
 export function NeighborsPage({ currentUser }: { currentUser: User }) {
   const [neighbors, setNeighbors] = useState<NeighborLink[]>([])
@@ -20,27 +24,55 @@ export function NeighborsPage({ currentUser }: { currentUser: User }) {
   const [busyKey, setBusyKey] = useState('')
   const [error, setError] = useState('')
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     setError('')
+
     try {
-      const [neighborRows, nearbyRows, incomingRows] = await Promise.all([
+      const [neighborResult, nearbyResult, incomingResult] = await Promise.allSettled([
         api.neighbors(currentUser.id),
         api.nearbyFarmers(currentUser.id, radiusKm),
         api.incomingFarmAccessRequests(currentUser.id),
       ])
-      setNeighbors(neighborRows)
-      setNearby(nearbyRows)
-      setIncoming(incomingRows)
-      setSelected((current) => current ? neighborRows.find((item) => item.user.id === current.user.id) ?? null : null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось загрузить соседей')
+
+      const errors: string[] = []
+
+      if (neighborResult.status === 'fulfilled') {
+        const neighborRows = neighborResult.value
+        setNeighbors(neighborRows)
+        setSelected((current) => current ? neighborRows.find((item) => item.user.id === current.user.id) ?? null : null)
+      } else {
+        errors.push(errorMessage(neighborResult.reason))
+      }
+
+      if (nearbyResult.status === 'fulfilled') setNearby(nearbyResult.value)
+      else errors.push(errorMessage(nearbyResult.reason))
+
+      if (incomingResult.status === 'fulfilled') setIncoming(incomingResult.value)
+      else errors.push(errorMessage(incomingResult.reason))
+
+      if (errors.length > 0) {
+        const uniqueErrors = [...new Set(errors)]
+        setError(errors.length === 3
+          ? uniqueErrors[0] ?? 'Не удалось загрузить соседей'
+          : `Часть данных не обновилась. ${uniqueErrors.join(' ')}`)
+      }
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentUser.id, radiusKm])
 
-  useEffect(() => { void load() }, [currentUser.id, radiusKm])
+  useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    const reloadAfterReconnect = () => void load()
+    window.addEventListener('online', reloadAfterReconnect)
+    window.addEventListener('agroconnect:sync-complete', reloadAfterReconnect)
+    return () => {
+      window.removeEventListener('online', reloadAfterReconnect)
+      window.removeEventListener('agroconnect:sync-complete', reloadAfterReconnect)
+    }
+  }, [load])
 
   async function addNeighbor(user: User) {
     setBusyKey(`add-${user.id}`)
