@@ -102,6 +102,8 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
       setPhotoName(file.name)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось обработать фотографию')
+    } finally {
+      event.target.value = ''
     }
   }
 
@@ -231,7 +233,19 @@ export function FeedPage({ currentUser }: { currentUser: User }) {
             <label className="feed-field"><span>Поле</span><select value={draft.field_id} onChange={(e) => selectField(Number(e.target.value))}>{fields.map((field) => <option key={field.id} value={field.id}>{field.name} · {field.crop}</option>)}</select></label>
             <label className="feed-field"><span>Статус</span><select value={draft.status} onChange={(e) => { const status = e.target.value as PostStatus; if (status !== 'problem') setMlAnalysis(null); setDraft({ ...draft, status }) }}>{STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           </div>
-          <label className="photo-picker"><input type="file" accept="image/*" onChange={(event) => void choosePhoto(event)} />{draft.photo_data_url ? <img src={draft.photo_data_url} alt="Предпросмотр публикации" /> : <span className="photo-placeholder"><b>＋ Фото с поля</b><small>Камера или галерея</small></span>}</label>
+          <div className="photo-picker">
+            {draft.photo_data_url ? <img src={draft.photo_data_url} alt="Предпросмотр публикации" /> : <div className="photo-placeholder"><b>＋ Фото с поля</b><small>Снимите сейчас или выберите готовое</small></div>}
+            <div className="photo-source-grid">
+              <label className="photo-source-area">
+                <input type="file" accept="image/*" capture="environment" onChange={(event) => void choosePhoto(event)} />
+                <span className="photo-source-icon">📷</span><b>Снять фото</b><small>Открыть камеру</small>
+              </label>
+              <label className="photo-source-area">
+                <input type="file" accept="image/*" onChange={(event) => void choosePhoto(event)} />
+                <span className="photo-source-icon">▣</span><b>Из галереи</b><small>Выбрать готовое фото</small>
+              </label>
+            </div>
+          </div>
           {photoName && <small className="photo-name">{photoName}</small>}
           {draft.status === 'problem' && draft.photo_data_url && navigator.onLine && <PlantHealthPanel userId={currentUser.id} fieldId={selectedField.id} imageDataUrl={draft.photo_data_url} onAnalysisChange={handleMlAnalysisChange} onSuggestedText={handleSuggestedText} />}
           {draft.status === 'problem' && draft.photo_data_url && !navigator.onLine && <div className="feed-info-card"><p>AI-анализ требует сети. Фото можно сохранить сейчас и проанализировать позже.</p></div>}
