@@ -24,6 +24,9 @@ PAUSE = float(os.environ.get("DEMO_PAUSE_SECONDS", "2.5"))
 LONG_PAUSE = float(os.environ.get("DEMO_LONG_PAUSE_SECONDS", "4"))
 ROOT = Path(__file__).resolve().parent
 PHOTO = ROOT / "assets" / "plant-problem.svg"
+SUBTITLE_PATH = Path(os.environ["DEMO_SUBTITLE_FILE"]) if os.environ.get("DEMO_SUBTITLE_FILE") else None
+CAPTIONS: list[tuple[float, float, str]] = []
+RECORDING_STARTED = 0.0
 
 
 def wait(driver: webdriver.Chrome, selector: tuple[str, str], seconds: int = 15):
@@ -36,6 +39,44 @@ def clickable(driver: webdriver.Chrome, selector: tuple[str, str], seconds: int 
 
 def pause(seconds: float = PAUSE) -> None:
     time.sleep(seconds)
+
+
+def subtitle(text: str) -> None:
+    """Start a caption and close the preceding one at the same timestamp."""
+    now = time.monotonic() - RECORDING_STARTED
+    if CAPTIONS:
+        start, _, previous = CAPTIONS[-1]
+        CAPTIONS[-1] = (start, now, previous)
+    CAPTIONS.append((now, now + LONG_PAUSE, text))
+
+
+def srt_time(value: float) -> str:
+    milliseconds = max(0, round(value * 1000))
+    hours, milliseconds = divmod(milliseconds, 3_600_000)
+    minutes, milliseconds = divmod(milliseconds, 60_000)
+    seconds, milliseconds = divmod(milliseconds, 1_000)
+    return f"{hours:02}:{minutes:02}:{seconds:02},{milliseconds:03}"
+
+
+@pytest.fixture(autouse=True)
+def subtitles():
+    global RECORDING_STARTED
+    CAPTIONS.clear()
+    RECORDING_STARTED = time.monotonic()
+    yield
+    if SUBTITLE_PATH is None:
+        return
+    if CAPTIONS:
+        start, _, text = CAPTIONS[-1]
+        CAPTIONS[-1] = (start, time.monotonic() - RECORDING_STARTED, text)
+    SUBTITLE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SUBTITLE_PATH.write_text(
+        "\n\n".join(
+            f"{index}\n{srt_time(start)} --> {srt_time(end)}\n{text}"
+            for index, (start, end, text) in enumerate(CAPTIONS, start=1)
+        ) + "\n",
+        encoding="utf-8",
+    )
 
 
 def go(driver: webdriver.Chrome, nav: str, title: str) -> None:
@@ -75,6 +116,7 @@ def driver():
 def test_record_agroconnect_story(driver: webdriver.Chrome):
     """Record the same connected story described in docs/DEMO_VIDEO.md."""
     driver.get(BASE_URL)
+    subtitle("AgroConnect\\nРабочая сеть для полей")
     wait(driver, (By.CSS_SELECTOR, '[data-demo-user="anna_farm"]'))
     pause(1)
     clickable(driver, (By.CSS_SELECTOR, '[data-demo-user="anna_farm"]')).click()
@@ -83,16 +125,19 @@ def test_record_agroconnect_story(driver: webdriver.Chrome):
 
     # Field diary, crop rotation and weather from a real seeded field.
     go(driver, "fields", "Поля")
+    subtitle("Дневник поля и севооборот")
     first_field = wait(driver, (By.CSS_SELECTOR, 'article.field-card:not(.pending-field-card)'))
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", first_field)
     wait(driver, (By.CSS_SELECTOR, '.crop-rotation'))
     pause(LONG_PAUSE)
     weather = wait(driver, (By.CSS_SELECTOR, '.weather-panel'))
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", weather)
+    subtitle("Погода привязана к конкретному полю")
     pause(LONG_PAUSE)
 
     # Nearby farmers and name search are read-only scenes and safe to repeat.
     go(driver, "neighbors", "Соседи")
+    subtitle("Соседей можно найти по карте, фамилии или нику")
     search = wait(driver, (By.CSS_SELECTOR, 'input[placeholder*="Иванова"]'))
     search.send_keys("Хабибуллин")
     clickable(driver, (By.XPATH, '//button[normalize-space()="Найти"]')).click()
@@ -102,6 +147,7 @@ def test_record_agroconnect_story(driver: webdriver.Chrome):
     # Beekeeper scenario: switch the test account without a distracting logout shot.
     driver.execute_script("localStorage.setItem('agroconnect.userId', '5');")
     driver.get(f"{BASE_URL}/#/alerts")
+    subtitle("Предупреждение об обработке вовремя приходит на пасеку")
     wait(driver, (By.XPATH, '//h1[normalize-space()="Предупреждения"]'))
     wait(driver, (By.CSS_SELECTOR, '.alert-card'))
     pause(LONG_PAUSE)
@@ -109,6 +155,7 @@ def test_record_agroconnect_story(driver: webdriver.Chrome):
     # Return to Anna for an actual offline post saved into IndexedDB outbox.
     driver.execute_script("localStorage.setItem('agroconnect.userId', '1');")
     driver.get(f"{BASE_URL}/#/feed")
+    subtitle("Без сети публикация сохраняется в очередь")
     wait(driver, (By.XPATH, '//h1[contains(normalize-space(), "Лента рядом")]'))
     clickable(driver, (By.XPATH, '//button[contains(normalize-space(), "Публикация")]')).click()
     photo = wait(driver, (By.CSS_SELECTOR, 'input[type="file"]'))
@@ -126,6 +173,7 @@ def test_record_agroconnect_story(driver: webdriver.Chrome):
     # Show the manual sync control. It may complete immediately on a fast backend.
     drafts = clickable(driver, (By.CSS_SELECTOR, '[aria-label^="Черновики"]'))
     drafts.click()
+    subtitle("После восстановления связи запись можно отправить сразу")
     try:
         clickable(driver, (By.XPATH, '//button[normalize-space()="Отправить сейчас"]'), seconds=8).click()
     except TimeoutException:
@@ -134,6 +182,7 @@ def test_record_agroconnect_story(driver: webdriver.Chrome):
 
     # AI is shown as a prepared preview. A failed external provider must not fail a recording.
     go(driver, "feed", "Лента рядом")
+    subtitle("AI предлагает гипотезу, фермер подтверждает её")
     clickable(driver, (By.XPATH, '//button[contains(normalize-space(), "Публикация")]')).click()
     photo = wait(driver, (By.CSS_SELECTOR, 'input[type="file"]'))
     photo.send_keys(str(PHOTO))
