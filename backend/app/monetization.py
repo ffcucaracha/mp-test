@@ -65,8 +65,7 @@ def record_monetization_event(
     return MonetizationEventOut(ok=True, event_name=payload.event_name)
 
 
-@router.get("/metrics")
-def monetization_metrics(db: Session = Depends(get_db)) -> dict[str, Any]:
+def monetization_metrics_data(db: Session) -> dict[str, Any]:
     rows = db.execute(
         select(ProductEvent.event_name, func.count(ProductEvent.id))
         .where(ProductEvent.event_name.in_(EVENT_NAMES))
@@ -92,3 +91,8 @@ def monetization_metrics(db: Session = Depends(get_db)) -> dict[str, Any]:
         "offer_decision_rate_percent": _pct(decisions, offer_shown),
         "ad_free_acceptance_percent": _pct(accepted, decisions),
     }
+
+
+@router.get("/metrics")
+def monetization_metrics(db: Session = Depends(get_db)) -> dict[str, Any]:
+    return monetization_metrics_data(db)
