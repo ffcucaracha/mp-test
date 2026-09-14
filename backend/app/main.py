@@ -6,7 +6,6 @@ from .dashboard import router as dashboard_router
 from .features import router as features_router
 from .feedback import router as feedback_router
 from .monetization import router as monetization_router
-from .nearby_routes import router as nearby_router
 from .plant_health_routes import router as plant_health_router
 from .product_metrics import router as product_metrics_router
 from .seed import seed_data
@@ -55,10 +54,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register the restored nearby-farmers route before the legacy API router.
-# Starlette resolves matching routes in registration order, so this fixes the
-# accidentally truncated implementation that is still present in api.py.
-app.include_router(nearby_router)
 app.include_router(router)
 app.include_router(product_metrics_router)
 app.include_router(features_router)
