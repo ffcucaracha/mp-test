@@ -4,16 +4,28 @@ import path from 'node:path'
 const root = process.cwd()
 const androidDir = path.join(root, 'android')
 const appGradle = path.join(androidDir, 'app', 'build.gradle')
+const manifestPath = path.join(androidDir, 'app', 'src', 'main', 'AndroidManifest.xml')
 const javaDir = path.join(androidDir, 'app', 'src', 'main', 'java', 'com', 'agroconnect', 'mvp')
 
 async function patchGradle() {
   let source = await readFile(appGradle, 'utf8')
   const dependency = `implementation "androidx.work:work-runtime:2.10.1"`
-  if (source.includes(dependency)) return
-  const marker = /dependencies\s*\{/
-  if (!marker.test(source)) throw new Error('Не найден блок dependencies в android/app/build.gradle')
-  source = source.replace(marker, (match) => `${match}\n    ${dependency}`)
-  await writeFile(appGradle, source)
+  if (!source.includes(dependency)) {
+    const marker = /dependencies\s*\{/
+    if (!marker.test(source)) throw new Error('Не найден блок dependencies в android/app/build.gradle')
+    source = source.replace(marker, (match) => `${match}\n    ${dependency}`)
+    await writeFile(appGradle, source)
+  }
+}
+
+async function patchManifest() {
+  let source = await readFile(manifestPath, 'utf8')
+  if (/android:allowBackup="[^"]*"/.test(source)) {
+    source = source.replace(/android:allowBackup="[^"]*"/, 'android:allowBackup="false"')
+  } else {
+    source = source.replace(/<application\b/, '<application android:allowBackup="false"')
+  }
+  await writeFile(manifestPath, source)
 }
 
 const mainActivity = `package com.agroconnect.mvp;
@@ -25,7 +37,35 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeOutboxPlugin.class);
+        registerPlugin(NativeInstallPlugin.class);
         super.onCreate(savedInstanceState);
+    }
+}
+`
+
+const installPlugin = `package com.agroconnect.mvp;
+
+import android.content.pm.PackageInfo;
+
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+
+@CapacitorPlugin(name = "NativeInstall")
+public class NativeInstallPlugin extends Plugin {
+    @PluginMethod
+    public void getInstallInfo(PluginCall call) {
+        try {
+            PackageInfo info = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+            JSObject result = new JSObject();
+            result.put("firstInstallTime", info.firstInstallTime);
+            result.put("lastUpdateTime", info.lastUpdateTime);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("Unable to read install info", error);
+        }
     }
 }
 `
@@ -169,7 +209,6 @@ public class OutboxSyncWorker extends Worker {
                     retry = true;
                     break;
                 }
-                // 4xx remains in the web outbox so the user can inspect/edit/delete it.
             } catch (Exception error) {
                 retry = true;
                 break;
@@ -220,7 +259,9 @@ public class OutboxSyncWorker extends Worker {
 
 await mkdir(javaDir, { recursive: true })
 await patchGradle()
+await patchManifest()
 await writeFile(path.join(javaDir, 'MainActivity.java'), mainActivity)
+await writeFile(path.join(javaDir, 'NativeInstallPlugin.java'), installPlugin)
 await writeFile(path.join(javaDir, 'NativeOutboxPlugin.java'), plugin)
 await writeFile(path.join(javaDir, 'OutboxSyncWorker.java'), worker)
-console.log('Android WorkManager outbox bridge installed.')
+console.log('Android WorkManager outbox bridge and install tracking installed.')
