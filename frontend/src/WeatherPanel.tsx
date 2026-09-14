@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api } from './api'
 import { getCacheEntry, putCacheEntry } from './offline'
-import type { AgroField, FieldWeather, User } from './types'
+import type { AgroField, FieldWeather, User, WeatherHour } from './types'
 
 const WEATHER_REFRESH_MS = 3 * 60 * 60 * 1000
 const WEATHER_MAX_AGE_MS = 72 * 60 * 60 * 1000
@@ -22,11 +22,53 @@ function formatDate(value: string | null) {
   }).format(new Date(value))
 }
 
+function formatForecastDate(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(`${value}T12:00:00`))
+}
+
 function formatAge(timestamp: number | null) {
   if (!timestamp) return ''
   const minutes = Math.max(1, Math.round((Date.now() - timestamp) / 60_000))
   if (minutes < 60) return `${minutes} мин назад`
   return `${Math.round(minutes / 60)} ч назад`
+}
+
+type DailyForecast = {
+  date: string
+  minTemperature: number
+  maxTemperature: number
+  precipitationProbability: number | null
+  maxWindSpeed: number | null
+}
+
+function buildDailyForecast(hours: WeatherHour[]): DailyForecast[] {
+  const grouped = new Map<string, WeatherHour[]>()
+  for (const hour of hours) {
+    const date = hour.time.slice(0, 10)
+    grouped.set(date, [...(grouped.get(date) ?? []), hour])
+  }
+
+  return [...grouped.entries()].slice(0, 3).map(([date, items]) => {
+    const temperatures = items.map((item) => item.temperature_c).filter(Number.isFinite)
+    const precipitation = items
+      .map((item) => item.precipitation_probability)
+      .filter((value): value is number => value !== null && Number.isFinite(value))
+    const wind = items
+      .map((item) => item.wind_speed_kmh)
+      .filter((value): value is number => value !== null && Number.isFinite(value))
+
+    return {
+      date,
+      minTemperature: temperatures.length ? Math.min(...temperatures) : 0,
+      maxTemperature: temperatures.length ? Math.max(...temperatures) : 0,
+      precipitationProbability: precipitation.length ? Math.max(...precipitation) : null,
+      maxWindSpeed: wind.length ? Math.max(...wind) : null,
+    }
+  })
 }
 
 export function WeatherPanel({ field, user }: { field: AgroField; user: User }) {
@@ -36,6 +78,7 @@ export function WeatherPanel({ field, user }: { field: AgroField; user: User }) 
   const [error, setError] = useState('')
   const [forecastOpen, setForecastOpen] = useState(false)
   const cacheKey = `weather:${user.id}:${field.id}`
+  const dailyForecast = useMemo(() => buildDailyForecast(weather?.hours ?? []), [weather?.hours])
 
   const load = useCallback(async (force = false) => {
     setError('')
@@ -102,7 +145,7 @@ export function WeatherPanel({ field, user }: { field: AgroField; user: User }) 
             <div><span>Осадки</span><strong>{weather.current_precipitation_mm === null || weather.current_precipitation_mm === undefined ? '—' : `${weather.current_precipitation_mm} мм`}</strong></div>
             <div><span>Ветер</span><strong>{weather.current_wind_speed_kmh === null || weather.current_wind_speed_kmh === undefined ? '—' : `${weather.current_wind_speed_kmh} км/ч`}</strong></div>
           </div>
-          <button type="button" className="weather-forecast-button" onClick={() => setForecastOpen(true)}>Прогноз на 72 часа</button>
+          <button type="button" className="weather-forecast-button" onClick={() => setForecastOpen(true)}>Прогноз на 3 дня →</button>
 
           {weather.frost_risk ? (
             <div className="frost-warning">
@@ -113,7 +156,39 @@ export function WeatherPanel({ field, user }: { field: AgroField; user: User }) 
           ) : (
             <p className="weather-ok">При пороге 0 °C заморозков в ближайшие 72 часа не ожидается.</p>
           )}
-          {forecastOpen && <div className="weather-modal-backdrop" role="presentation" onClick={() => setForecastOpen(false)}><section className="weather-modal" role="dialog" aria-modal="true" aria-label={`Прогноз для ${field.name}`} onClick={(event) => event.stopPropagation()}><div className="weather-panel-heading"><div><strong>Прогноз: {field.name}</strong><small>Open-Meteo · по координатам поля</small></div><button type="button" className="weather-refresh" onClick={() => setForecastOpen(false)}>×</button></div><div className="weather-hours">{weather.hours.map((hour) => <div key={hour.time}><time>{formatDate(hour.time)}</time><strong>{formatTemperature(hour.temperature_c)}</strong><span>💨 {hour.wind_speed_kmh ?? '—'} км/ч</span><span>☔ {hour.precipitation_probability ?? '—'}%</span></div>)}</div></section></div>}
+
+          {forecastOpen && (
+            <div className="weather-modal-backdrop" role="presentation" onClick={() => setForecastOpen(false)}>
+              <section className="weather-modal" role="dialog" aria-modal="true" aria-label={`Прогноз для ${field.name}`} onClick={(event) => event.stopPropagation()}>
+                <div className="weather-panel-heading">
+                  <div>
+                    <strong>Прогноз на 3 дня</strong>
+                    <small>{field.name} · данные сохранены для офлайн-просмотра</small>
+                    {cachedAt && <small>{navigator.onLine ? 'Обновлено' : 'Офлайн-кэш'}: {formatAge(cachedAt)}</small>}
+                  </div>
+                  <button type="button" className="weather-refresh" onClick={() => setForecastOpen(false)} aria-label="Закрыть прогноз">×</button>
+                </div>
+
+                <div className="weather-days">
+                  {dailyForecast.map((day) => (
+                    <article className="weather-day" key={day.date}>
+                      <time>{formatForecastDate(day.date)}</time>
+                      <div className="weather-day-temperature">
+                        <strong>{formatTemperature(day.maxTemperature)}</strong>
+                        <span>{formatTemperature(day.minTemperature)}</span>
+                      </div>
+                      <div className="weather-day-details">
+                        <span>☔ до {day.precipitationProbability ?? '—'}%</span>
+                        <span>💨 до {day.maxWindSpeed === null ? '—' : `${Math.round(day.maxWindSpeed)} км/ч`}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                {dailyForecast.length === 0 && <p className="weather-loading">В сохранённых данных нет почасового прогноза.</p>}
+              </section>
+            </div>
+          )}
         </>
       )}
     </section>
