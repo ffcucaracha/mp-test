@@ -11,15 +11,17 @@ find_adb() {
     command -v adb
     return
   fi
+
   for candidate in \
     "${ANDROID_HOME:-}/platform-tools/adb" \
     "${ANDROID_SDK_ROOT:-}/platform-tools/adb" \
-    "/media/saa/Data/Android/Sdk/platform-tools/adb"; do
+    "$HOME/Android/Sdk/platform-tools/adb"; do
     if [[ -n "$candidate" && -x "$candidate" ]]; then
       printf '%s\n' "$candidate"
       return
     fi
   done
+
   echo "adb не найден. Укажите ANDROID_HOME/ANDROID_SDK_ROOT или добавьте platform-tools в PATH." >&2
   exit 1
 }
@@ -57,8 +59,18 @@ echo "Android mode: $MODE"
 echo "Backend URL: $API_URL"
 
 cd "$FRONTEND_DIR"
-VITE_API_URL="$API_URL" npm run build
-npx cap sync android
+
+if [[ ! -d android ]]; then
+  echo "Android project not found; creating Capacitor Android project..."
+  npx cap add android
+fi
+
+# Use the project build pipeline rather than plain `vite build` + `cap sync`:
+# - builds without the PWA service worker for the APK;
+# - copies fresh web assets;
+# - installs the native WorkManager/outbox bridge and Android patches.
+VITE_API_URL="$API_URL" npm run cap:sync
+
 cd android
 ./gradlew installDebug
 
