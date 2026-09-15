@@ -1,70 +1,102 @@
 # AgroConnect MVP
 
-Мобильное приложение для различных сегментов сельхозпроизводителей: дневник полей, локальная сеть взаимопомощи, предупреждения и AI-предварительная диагностика растений. Один React-клиент можно запускать как PWA или упаковывать в Android APK через Capacitor; серверная часть — FastAPI + PostgreSQL.
+AgroConnect — мобильное приложение для сельхозпроизводителей: рабочий дневник полей, локальная сеть взаимопомощи, предупреждения и AI-предварительный анализ состояния растений.
 
-## Техническое описание
+Один клиент на React + TypeScript используется сразу в двух вариантах:
 
-### Стек
+- web/PWA;
+- Android APK через Capacitor.
+
+Серверная часть — FastAPI + PostgreSQL.
+
+## Стек
 
 ### Frontend / mobile
-- React + TypeScript
-- Vite
-- `vite-plugin-pwa` — PWA и установка на главный экран
-- Capacitor — Android-обёртка и сборка APK из того же frontend-кода
+
+- React + TypeScript;
+- Vite;
+- `vite-plugin-pwa` для web/PWA;
+- Capacitor для Android APK из той же кодовой базы;
+- IndexedDB для локального кэша и outbox;
+- Android WorkManager для фоновой отправки накопленной очереди.
 
 ### Backend
-- Python
-- FastAPI
-- SQLAlchemy 2
-- PostgreSQL
+
+- Python 3.12;
+- FastAPI;
+- SQLAlchemy 2;
+- Alembic;
+- PostgreSQL.
 
 ### Infrastructure
-- Docker + Docker Compose для dev-окружения
 
-### Архитектура и документация
+- Docker + Docker Compose;
+- Swagger / ReDoc / OpenAPI для API;
+- GitHub Actions для smoke-тестов и Android debug build.
 
-- API документирован через Swagger (`/docs`), ReDoc (`/redoc`) и OpenAPI JSON (`/openapi.json`); сценарии описаны в [docs/API.md](docs/API.md).
-- Данные и миграции хранятся в PostgreSQL; демо-данные создаются при первом запуске.
-- Внутренняя панель жюри: `http://localhost:8000/internal/dashboard`. Она строится по данным текущей БД.
-- `GET /api/health` — проверка доступности backend.
+## Что реализовано в MVP
 
-> Авторизация в MVP намеренно тестовая: выбранный `userId` хранится в `localStorage`. Это демонстрационный механизм, не production-auth.
+- профиль хозяйства;
+- поля с координатами и контурами;
+- севооборот и история сезонов;
+- локальная лента публикаций;
+- личные записи «Только для меня»;
+- реакции и комментарии;
+- поиск хозяйств рядом;
+- явная связь «Сосед», не зависящая только от географии;
+- запрос доступа сразу ко всем полям хозяйства;
+- пасеки и предупреждения об обработках;
+- погодные предупреждения;
+- прогноз на 3 дня;
+- AI/ML-анализ фото с подтверждением или исправлением результата человеком;
+- офлайн-кэш, очередь действий и режим «Поехал в поля»;
+- продуктовые метрики и внутренний dashboard;
+- тестовые monetization-гипотезы без реальных платежей.
 
-## Структура
+> Авторизация в MVP намеренно упрощена: текущий тестовый пользователь выбирается из списка, а его `userId` хранится локально. Это демонстрационный механизм, не production-auth.
 
-```text
-.
-├── backend/
-│   ├── app/main.py
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   ├── capacitor.config.ts
-│   ├── vite.config.ts
-│   └── Dockerfile
-├── docker-compose.yml
-└── README.md
-```
+## Погода
 
-## Продуктовая часть
+Прогноз запрашивается через backend по координатам поля. Основной внешний источник — Open-Meteo.
 
-- профиль хозяйства и поля с контурами;
-- лента в выбранном радиусе и публикации добавленных соседей независимо от расстояния;
-- личный дневник: запись «Только для меня» не попадает в общую ленту;
-- поиск хозяйств рядом, добавление в соседи и единый запрос доступа ко всем полям хозяйства;
-- предупреждения о погоде, обработках и проблемах растений;
-- AI-анализ фото с подтверждением или исправлением результата фермером;
-- офлайн-кэш полей, ленты и актуальной погоды; режим «Поехал в поля»;
-- форма обратной связи и метрики для проверки гипотез.
+AgroConnect также умеет импортировать метеостанции компании. Если ближайшая доступная станция находится не дальше **50 км**, её последние фактические измерения используются как источник текущей погоды. Если подходящей станции нет или её данные временно недоступны, прогноз продолжает работать через Open-Meteo.
 
-Прогноз поступает из Open-Meteo. Станции компании импортируются в БД отдельно и назначаются новому полю лишь при расстоянии до **30 км**; иначе поле остаётся на Open-Meteo. Маршруты компании по `/fields/...` не используются.
+Клиент кэширует прогноз по каждому полю:
 
-## Запуск и режимы
+- если сохранённые данные старше 3 часов и есть сеть, прогноз обновляется;
+- при восстановлении сети выполняется повторная проверка;
+- сохранённый прогноз доступен офлайн до 72 часов;
+- интерфейс показывает возраст данных.
 
-### Docker — рекомендуемый dev-режим
+## ML / AI-анализ
 
-Нужны Docker и Docker Compose.
+Backend использует единый интерфейс провайдера. Поддерживаются:
+
+- `kindwise` — crop.health;
+- `gemini` — мультимодальная модель;
+- `plantvillage` — локальная ONNX-модель на backend;
+- `demo` — детерминированный режим для CI и стабильной демонстрации.
+
+ML не позиционируется как диагноз. Пользователь подтверждает, отклоняет или исправляет гипотезу, а результат сохраняется вместе с feedback для будущего размеченного датасета.
+
+Подробнее: [docs/ML_PLANT_HEALTH.md](docs/ML_PLANT_HEALTH.md).
+
+## Офлайн-режим
+
+После хотя бы одного успешного онлайн-запуска приложение умеет показывать ранее загруженные данные и сохранять изменяющие действия в локальный outbox.
+
+В очередь могут попадать, в частности:
+
+- публикации;
+- реакции;
+- комментарии;
+- записи севооборота;
+- создание поля;
+- предупреждения об обработках.
+
+На Android очередь зеркалируется в native storage и может отправляться через WorkManager после восстановления сети. Подробнее: [docs/OFFLINE_FIELD_MODE.md](docs/OFFLINE_FIELD_MODE.md).
+
+## Запуск через Docker
 
 ```bash
 git clone https://github.com/ffcucaracha/mp-test.git
@@ -75,159 +107,140 @@ docker compose up --build
 
 После запуска:
 
-- приложение: `http://localhost:5173`
-- Swagger: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-- OpenAPI JSON: `http://localhost:8000/openapi.json`
-- панель жюри: `http://localhost:8000/internal/dashboard`
+- приложение: `http://localhost:5173`;
+- Swagger: `http://localhost:8000/docs`;
+- ReDoc: `http://localhost:8000/redoc`;
+- OpenAPI JSON: `http://localhost:8000/openapi.json`;
+- dashboard: `http://localhost:8000/internal/dashboard`;
+- healthcheck: `http://localhost:8000/api/health`.
 
-### Внешние сервисы
-
-Без ключей приложение работает в режиме `Demo · offline`: он нужен для показа сценария, но не делает реальную диагностику. Все настройки собраны в `.env.example`. Для Kindwise задайте:
-
-```dotenv
-PLANT_HEALTH_PROVIDER=kindwise
-CROP_HEALTH_API_KEY=ваш_ключ_Kindwise
-```
-
-Затем выполните `docker compose up -d --build`. Для Gemini вместо этого задайте
-`PLANT_HEALTH_PROVIDER=gemini` и `GEMINI_API_KEY`. Ключи не добавляйте в Git.
-- ping: `http://localhost:8000/api/health`
-- PostgreSQL: `localhost:5432`
-
-Для остановки:
+Остановить:
 
 ```bash
 docker compose down
 ```
 
-Удалить также dev-базу:
+Полностью удалить локальную demo-базу:
 
 ```bash
 docker compose down -v
 ```
 
-Frontend и backend подключены как volumes, поэтому изменения исходников подхватываются без пересборки контейнеров.
+## Конфигурация внешних сервисов
 
-## Мобильный вариант 1: PWA
+Секреты не хранятся в Git. Пример переменных находится в `.env.example`.
 
-PWA использует тот же React-код. Для production-сборки:
+Для Kindwise:
+
+```dotenv
+PLANT_HEALTH_PROVIDER=kindwise
+CROP_HEALTH_API_KEY=...
+```
+
+Для Gemini:
+
+```dotenv
+PLANT_HEALTH_PROVIDER=gemini
+GEMINI_API_KEY=...
+```
+
+Для API метеостанций компании:
+
+```dotenv
+COMPANY_API_URL=...
+COMPANY_API_EMAIL=...
+COMPANY_API_PASSWORD=...
+```
+
+Без ML-ключей можно использовать `PLANT_HEALTH_PROVIDER=demo`.
+
+## Web / PWA
 
 ```bash
 cd frontend
 npm install
 npm run build
-```
-
-Результат появится в `frontend/dist`.
-
-Для локальной проверки production-сборки:
-
-```bash
 npm run preview -- --host 0.0.0.0
 ```
 
-При открытии приложения на поддерживаемом мобильном браузере его можно установить через пункт браузера **«Добавить на главный экран» / «Установить приложение»**.
+Для размещения PWA вне `localhost` нужен HTTPS.
 
-Для реального размещения PWA нужен HTTPS (кроме `localhost`).
+## Android APK через Capacitor
 
-## Мобильный вариант 2: Android APK через Capacitor
+`frontend/android/` не хранится в Git и создаётся локально.
 
-### Требования
-
-На машине для Android-сборки должны быть установлены:
-
-- Node.js + npm;
-- Android Studio;
-- Android SDK;
-- JDK, совместимый с текущей версией Android Gradle Plugin.
-
-### Первый запуск
+Первый запуск после clone:
 
 ```bash
 cd frontend
 npm install
-npm run build
 npx cap add android
-npx cap sync android
-npx cap open android
+npm run cap:sync
+npm run cap:open
 ```
 
-В Android Studio можно запустить приложение на эмуляторе/телефоне или собрать APK через **Build → Build App Bundles or APKs → Build APKs**.
-
-После изменений frontend:
+После любых изменений frontend для Android используйте именно:
 
 ```bash
-npm run build
-npx cap sync android
+npm run cap:sync
 ```
 
-Затем снова запуск/сборка из Android Studio.
+Эта команда:
 
-### API при запуске Android
+1. собирает отдельный Capacitor build без PWA service worker;
+2. синхронизирует web assets в Android-проект;
+3. устанавливает native bridge для фоновой outbox-синхронизации.
 
-Браузер на компьютере видит backend по `http://localhost:8000`, но для Android это другой хост.
-
-Для Android Emulator:
+Debug APK из терминала:
 
 ```bash
-VITE_API_URL=http://10.0.2.2:8000 npm run build
-npx cap sync android
+npm run android:debug
 ```
 
-Для физического телефона укажи LAN-IP компьютера, например:
+Либо после `npm run cap:sync` можно открыть `frontend/android` в Android Studio и собрать APK через Android Studio.
+
+### Backend URL для Android
+
+API URL задаётся через `VITE_API_URL` во время сборки.
+
+Android Emulator:
 
 ```bash
-VITE_API_URL=http://192.168.1.50:8000 npm run build
-npx cap sync android
+VITE_API_URL=http://10.0.2.2:8000 npm run cap:sync
 ```
 
-Телефон и компьютер должны быть в одной сети, а порт `8000` доступен с телефона.
-
-Для production позже нужно будет указывать публичный HTTPS API:
+Физический телефон через LAN:
 
 ```bash
-VITE_API_URL=https://api.example.com npm run build
-npx cap sync android
+VITE_API_URL=http://192.168.1.50:8000 npm run cap:sync
 ```
 
-## Локальный запуск без Docker
-
-### Backend
+Для установки через USB удобнее использовать:
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-export DATABASE_URL='postgresql+psycopg://agroconnect:agroconnect@localhost:5432/agroconnect'
-uvicorn app.main:app --reload
+ANDROID_MODE=usb bash scripts/android-device.sh
 ```
 
-PostgreSQL при этом нужно запустить отдельно.
+Подробный чек-лист: [docs/ANDROID_DEVICE_QA.md](docs/ANDROID_DEVICE_QA.md).
 
-### Метеостанции компании
+## Метеостанции компании
 
-AgroConnect хранит перечень доступных метеостанций и время синхронизации в своей БД. Заполните локальный `.env` (не добавляйте его в Git):
+AgroConnect хранит импортированный список станций в своей БД.
 
-```dotenv
-COMPANY_API_URL=https://api.company.example
-COMPANY_API_EMAIL=ваш_email
-COMPANY_API_PASSWORD=ваш_пароль
-```
-
-После запуска backend выполните однократный импорт:
+После настройки `COMPANY_API_*` синхронизация выполняется так:
 
 ```bash
 curl -X POST http://localhost:8000/api/internal/weather-stations/sync
 ```
 
-Импорт использует только `POST /api/auth/login` и `GET /api/weather-sensor/api/devices`. При создании поля оно привязывается к ближайшей станции, если та находится не дальше **30 км**; иначе прогноз и предупреждения продолжают работать через Open-Meteo. Маршруты компании по `/fields/...` намеренно не вызываются.
+Импорт использует API авторизации и API устройств/метеостанций. Маршруты внешней системы по полям AgroConnect не использует.
 
-### Frontend
+## Документация
 
-```bash
-cd frontend
-npm install
-VITE_API_URL=http://localhost:8000 npm run dev
-```
+- [docs/API.md](docs/API.md) — краткая карта основных API-сценариев; полный контракт всегда доступен через OpenAPI;
+- [docs/DEMO_DATA.md](docs/DEMO_DATA.md) — актуальные demo/seed данные;
+- [docs/ANDROID_DEVICE_QA.md](docs/ANDROID_DEVICE_QA.md) — Android build и ручная проверка;
+- [docs/OFFLINE_FIELD_MODE.md](docs/OFFLINE_FIELD_MODE.md) — офлайн-архитектура;
+- [docs/ML_PLANT_HEALTH.md](docs/ML_PLANT_HEALTH.md) — ML-провайдеры и human-in-the-loop;
+- [docs/DEMO_VIDEO.md](docs/DEMO_VIDEO.md) — только сценарий демонстрационного ролика;
+- [docs/SRS_LIGHT.md](docs/SRS_LIGHT.md), [docs/MVP_DECISIONS.md](docs/MVP_DECISIONS.md), [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) — исходная продуктовая рамка, решения и план начала хакатона; они сохраняются как исторические документы и не являются точным описанием текущего состояния кода.
